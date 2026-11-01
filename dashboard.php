@@ -5,6 +5,8 @@
  */
 require_once 'includes/auth.php';
 
+/** @var mysqli $conn */
+
 $account  = require_login();
 $is_admin = ($account['role'] === 'admin');
 $user_id  = (int) $account['user_id'];
@@ -184,7 +186,7 @@ $active_page = 'dashboard';
         <div class="row g-4 mb-4">
             <div class="col-lg-8">
                 <section class="gr-card h-100" id="continue-playing">
-                    <h2 class="section-title">Continue Playing</h2>
+                    <h2 class="section-title"><?php echo ($completed === 0 ) ? 'Start Playing' : 'Continue Playing'; ?></h2>
     <?php if ($total_levels === 0): ?>
                     <div class="empty-state">No levels are available yet. Check back soon!</div>
     <?php elseif ($next_level === null): ?>
@@ -199,8 +201,7 @@ $active_page = 'dashboard';
                     <div class="progress mb-3" role="progressbar" aria-label="Level progress" aria-valuenow="<?php echo $percent; ?>" aria-valuemin="0" aria-valuemax="100">
                         <div class="progress-bar" style="width: <?php echo $percent; ?>%"></div>
                     </div>
-                    <!-- Deliverable 3 will point this button to play.php?id=... -->
-                    <a class="btn btn-primary align-self-start" href="levels.php">&#9654; Continue Playing</a>
+                    <a class="btn btn-primary align-self-start" href="play.php?id=<?php echo (int) $next_level['level_id']; ?>">&#9654; <?php echo ($completed === 0 ) ? 'Start Playing' : 'Continue Playing'; ?></a>
     <?php endif; ?>
                 </section>
             </div>

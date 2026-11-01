@@ -5,6 +5,9 @@
  */
 require_once 'includes/auth.php';
 
+
+/** @var mysqli $conn */
+
 redirect_if_logged_in();   // authenticated users cannot open the registration page
 
 $errors = [];

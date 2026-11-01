@@ -107,16 +107,39 @@ function redirect_if_logged_in()
 }
 
 /**
+ * Looks up the logged-in account WITHOUT redirecting.
+ * Returns ['user_id', 'username', 'role'] or null (no session / account deleted / bad role).
+ * The role and username in the session are refreshed from the database.
+ */
+function get_session_account()
+{
+    global $conn;
+
+    if (empty($_SESSION['user_id'])) {
+        return null;
+    }
+    $account = db_select_one(
+        $conn,
+        'SELECT user_id, username, role FROM users WHERE user_id = ?',
+        'i',
+        [(int) $_SESSION['user_id']]
+    );
+    if ($account === null || !in_array($account['role'], ['user', 'admin'], true)) {
+        return null;
+    }
+    $_SESSION['username'] = $account['username'];
+    $_SESSION['role']     = $account['role'];
+    return $account;
+}
+
+/**
  * Guard for every protected page. It checks on the SERVER that:
  *   1. a session exists, 2. the account still exists in the database,
  *   3. the role stored in the database is valid.
- * The role/username in the session are refreshed from the database each time.
  * Returns the account row: ['user_id', 'username', 'role'].
  */
 function require_login()
 {
-    global $conn;
-
     // Protected pages must not be kept in the browser cache (back button after logout).
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
     header('Pragma: no-cache');
@@ -126,22 +149,13 @@ function require_login()
         redirect('index.php');
     }
 
-    $account = db_select_one(
-        $conn,
-        'SELECT user_id, username, role FROM users WHERE user_id = ?',
-        'i',
-        [(int) $_SESSION['user_id']]
-    );
-
-    if ($account === null || !in_array($account['role'], ['user', 'admin'], true)) {
+    $account = get_session_account();
+    if ($account === null) {
         destroy_session();
         start_fresh_session();
         set_flash('warning', 'Your session is no longer valid. Please log in again.');
         redirect('index.php');
     }
-
-    $_SESSION['username'] = $account['username'];
-    $_SESSION['role']     = $account['role'];
     return $account;
 }
 
@@ -188,6 +202,13 @@ function csrf_is_valid()
 {
     $sent = post_string('csrf_token');
     return $sent !== '' && !empty($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $sent);
+}
+
+/** CSRF check for fetch() requests: the token travels in the X-CSRF-Token header. */
+function csrf_header_is_valid()
+{
+    $sent = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    return is_string($sent) && $sent !== '' && !empty($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $sent);
 }
 
 /** For action handlers: stop with a redirect when the token is missing or wrong. */

@@ -169,7 +169,7 @@ function get_levels_with_status($conn, $user_id)
 {
     $levels = db_select_all(
         $conn,
-        'SELECT level_id, title, difficulty, grid_width, grid_height, par_moves
+        'SELECT level_id, title, hint, difficulty, grid_width, grid_height, par_moves, layout
          FROM levels ORDER BY sort_order ASC, level_id ASC'
     );
     $done_rows = db_select_all(
@@ -194,6 +194,9 @@ function get_levels_with_status($conn, $user_id)
         } else {
             $status = 'locked';
         }
+        // number of boxes = '$' (box) + '*' (box already on a target) characters in the layout
+        $levels[$index]['box_count'] = substr_count($level['layout'], '$') + substr_count($level['layout'], '*');
+        unset($levels[$index]['layout']);
         $levels[$index]['number'] = $index + 1;
         $levels[$index]['status'] = $status;
         $levels[$index]['best_moves'] = $is_done ? $best[$id] : null;
@@ -211,6 +214,50 @@ function is_level_unlocked($conn, $user_id, $level_id)
         }
     }
     return false;
+}
+
+/** Id of the level that follows $level_id in play order, or null for the last level. */
+function get_next_level_id($conn, $level_id)
+{
+    $rows = db_select_all($conn, 'SELECT level_id FROM levels ORDER BY sort_order ASC, level_id ASC');
+    foreach ($rows as $index => $row) {
+        if ((int) $row['level_id'] === (int) $level_id) {
+            return isset($rows[$index + 1]) ? (int) $rows[$index + 1]['level_id'] : null;
+        }
+    }
+    return null;
+}
+
+/**
+ * Leaderboard position of one player: ['rank', 'levels_done', 'total_moves'] or null if no level is completed.
+ * Rule (same as the dashboard): more levels first, then fewer total moves; ties share a rank.
+ */
+function get_user_rank($conn, $user_id)
+{
+    $mine = db_select_one(
+        $conn,
+        'SELECT COUNT(*) AS levels_done, COALESCE(SUM(best_moves), 0) AS total_moves
+         FROM user_progress WHERE user_id = ?',
+        'i',
+        [(int) $user_id]
+    );
+    $done = (int) $mine['levels_done'];
+    $total = (int) $mine['total_moves'];
+    if ($done === 0) {
+        return null;
+    }
+    $ahead = db_select_one(
+        $conn,
+        'SELECT COUNT(*) AS ahead FROM (
+             SELECT p.user_id, COUNT(*) AS levels_done, SUM(p.best_moves) AS total_moves
+             FROM user_progress p JOIN users u ON u.user_id = p.user_id
+             WHERE u.role = \'user\' GROUP BY p.user_id
+         ) t
+         WHERE t.levels_done > ? OR (t.levels_done = ? AND t.total_moves < ?)',
+        'iii',
+        [$done, $done, $total]
+    );
+    return ['rank' => (int) $ahead['ahead'] + 1, 'levels_done' => $done, 'total_moves' => $total];
 }
 
 /* --------------------------------------------------------------- UI helpers */

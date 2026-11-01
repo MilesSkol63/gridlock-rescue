@@ -5,6 +5,8 @@
  */
 require_once 'includes/auth.php';
 
+/** @var mysqli $conn */
+
 redirect_if_logged_in();   // instructor rule: an active session cannot reopen the login page
 
 // A real bcrypt hash used only to keep response time similar when the account does not exist.
