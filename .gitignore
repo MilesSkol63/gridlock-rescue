@@ -1,0 +1,12 @@
+# secrets and local configuration - never commit
+.env
+.env.*
+includes/config.local.php
+# OS / editor / build files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+vendor/
+*.zip
+*.log

@@ -1,0 +1,9 @@
+{
+    "name": "gridlock-rescue/app",
+    "description": "Gridlock Rescue - PHP/MySQL puzzle game (college endterm project)",
+    "type": "project",
+    "require": {
+        "php": ">=8.2",
+        "ext-mysqli": "*"
+    }
+}

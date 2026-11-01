@@ -1,0 +1,13 @@
+# Used by Apache (XAMPP). Railway's FrankenPHP/Caddy server ignores this file.
+Options -Indexes
+
+# Hide internal folders from the browser (the pages in the project root stay public).
+<IfModule mod_alias.c>
+    RedirectMatch 404 (^|/)(includes|database|docs)(/|$)
+</IfModule>
+
+<FilesMatch "^(\.env.*|\.gitignore|composer\.(json|lock)|setup_admin\.php)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+</FilesMatch>

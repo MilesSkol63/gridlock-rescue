@@ -1,0 +1,142 @@
+/* assets/css/style.css (NEW) - Gridlock Rescue custom styles on top of Bootstrap 5.
+   Colours and fonts follow the approved Figma design tokens. */
+:root {
+    --gr-navy: #1B2A41;
+    --gr-navy-2: #2B3F5C;
+    --gr-slate: #324A5F;
+    --gr-floor: #22344F;
+    --gr-amber: #F5A623;
+    --gr-teal: #1FB5A0;
+    --gr-coral: #E4572E;
+    --gr-green: #2ECC71;
+    --gr-bg: #F4F6F8;
+    --gr-ink: #1F2933;
+    --gr-muted: #6B7785;
+    --gr-border: #D5DBE1;
+    --bs-body-font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --bs-body-bg: var(--gr-bg);
+    --bs-body-color: var(--gr-ink);
+    --bs-link-color: #2F63C8;
+}
+
+body { display: flex; flex-direction: column; min-height: 100vh; }
+h1, h2, h3, .navbar-brand, .stat-value, .brand-title {
+    font-family: 'Poppins', 'Inter', system-ui, sans-serif;
+    font-weight: 600;
+    color: var(--gr-navy);
+}
+
+/* ---------- navbar ---------- */
+.navbar-gr { background: var(--gr-navy); padding-top: .65rem; padding-bottom: .65rem; }
+.navbar-gr .navbar-brand { color: #fff; font-size: 1.15rem; }
+.navbar-gr .nav-link { color: #C9D3DF; font-weight: 500; border-radius: 6px; padding: .4rem .8rem; }
+.navbar-gr .nav-link:hover, .navbar-gr .nav-link:focus { color: #fff; background: var(--gr-navy-2); }
+.navbar-gr .nav-link.active { color: var(--gr-amber); background: var(--gr-navy-2); }
+.navbar-gr .navbar-toggler { border-color: rgba(255,255,255,.5); }
+.navbar-gr .navbar-toggler-icon { filter: invert(1); }
+.nav-username { color: #fff; font-weight: 500; }
+.brand-logo {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; border-radius: 6px;
+    background: var(--gr-amber); color: var(--gr-navy);
+    font: 700 .8rem 'Poppins', sans-serif;
+}
+
+/* ---------- buttons and forms ---------- */
+.btn-primary {
+    --bs-btn-color: var(--gr-navy); --bs-btn-bg: var(--gr-amber); --bs-btn-border-color: var(--gr-amber);
+    --bs-btn-hover-color: var(--gr-navy); --bs-btn-hover-bg: #E39610; --bs-btn-hover-border-color: #E39610;
+    --bs-btn-active-color: var(--gr-navy); --bs-btn-active-bg: #D18A0E; --bs-btn-active-border-color: #D18A0E;
+    --bs-btn-focus-shadow-rgb: 245, 166, 35;
+    font-weight: 600;
+}
+.btn-outline-navy {
+    --bs-btn-color: var(--gr-navy); --bs-btn-border-color: var(--gr-navy); --bs-btn-bg: #fff;
+    --bs-btn-hover-color: #fff; --bs-btn-hover-bg: var(--gr-navy); --bs-btn-hover-border-color: var(--gr-navy);
+    --bs-btn-active-color: #fff; --bs-btn-active-bg: var(--gr-navy-2); --bs-btn-active-border-color: var(--gr-navy-2);
+    --bs-btn-focus-shadow-rgb: 27, 42, 65;
+    font-weight: 600;
+}
+.form-label { font-weight: 600; font-size: .9rem; }
+.form-control:focus {
+    border-color: var(--gr-amber);
+    box-shadow: 0 0 0 .2rem rgba(245, 166, 35, .25);
+}
+.form-text { font-size: .8rem; }
+a:focus-visible, button:focus-visible { outline: 3px solid rgba(245, 166, 35, .6); outline-offset: 2px; }
+
+/* ---------- cards, headers, stats ---------- */
+.gr-card {
+    display: flex; flex-direction: column;
+    background: #fff; border: 1px solid var(--gr-border); border-radius: 10px; padding: 1.25rem;
+}
+.page-main { flex: 1 0 auto; padding-top: 2rem; padding-bottom: 2rem; }
+.page-header { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-bottom: 1.5rem; }
+.page-header h1 { font-size: 1.75rem; margin: 0; }
+.section-title { font-size: 1.1rem; margin-bottom: .9rem; }
+.level-title { font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 1.15rem; color: var(--gr-navy); }
+.stat-card { background: #fff; border: 1px solid var(--gr-border); border-radius: 10px; padding: 1rem; height: 100%; }
+.stat-label { font-size: .7rem; font-weight: 700; letter-spacing: .04em; color: var(--gr-muted); }
+.stat-value { font-size: 1.75rem; line-height: 1.3; }
+.stat-value-sm { font-size: 1.4rem; }
+.empty-state {
+    border: 1px dashed var(--gr-border); border-radius: 8px; padding: 1rem;
+    color: var(--gr-muted); background: #FAFBFC;
+}
+.progress { height: .75rem; background: #EEF1F4; }
+.progress-bar { background: var(--gr-teal); }
+.gr-table thead th { background: #EEF1F4; font-size: .8rem; }
+
+/* ---------- badges ---------- */
+.badge { font-weight: 700; letter-spacing: .02em; border-radius: 99px; padding: .35em .75em; }
+.badge-easy { background: #E3F6F3; color: #0E7567; }
+.badge-medium { background: #FFF3DB; color: #8A5A00; }
+.badge-hard { background: #FDECE8; color: #9B2C12; }
+.badge-role-player { background: #E3F6F3; color: #0E7567; }
+.badge-role-admin { background: var(--gr-amber); color: var(--gr-navy); }
+.badge-stage { background: #EAF0FF; color: #2F63C8; }
+
+/* ---------- login / register ---------- */
+.auth-topbar { background: var(--gr-navy); padding: .8rem 0; }
+.auth-topbar-title { color: #fff; font: 600 1rem 'Poppins', sans-serif; letter-spacing: .03em; }
+.auth-main { flex: 1 0 auto; padding-top: 2.5rem; padding-bottom: 2.5rem; }
+.auth-card { padding: 1.75rem; }
+.auth-heading { font-size: 1.5rem; margin-bottom: 1rem; }
+.brand-panel {
+    width: 100%; background: var(--gr-navy); border-radius: 12px; padding: 2rem;
+    display: flex; flex-direction: column; justify-content: center; gap: 1rem;
+}
+.brand-title { color: #fff; font-size: 2rem; margin: 0; }
+.brand-tagline { color: #C9D3DF; font-size: 1.05rem; margin: 0; }
+.brand-list { color: #C9D3DF; margin: 0; padding-left: 1.1rem; }
+.site-footer {
+    background: #E9EDF1; color: var(--gr-muted); font-size: .8rem;
+    text-align: center; padding: 1rem; flex-shrink: 0;
+}
+
+/* ---------- board cells (same classes the game board will use in Deliverable 3) ---------- */
+.board {
+    display: grid; grid-template-columns: repeat(var(--cols), var(--cell, 40px));
+    width: max-content; background: var(--gr-navy); border-radius: 8px; overflow: hidden;
+}
+.cell { position: relative; width: var(--cell, 40px); height: var(--cell, 40px); background: var(--gr-floor); border: 1px solid var(--gr-navy); }
+.cell.wall { background: var(--gr-slate); }
+.cell.target::after {
+    content: ''; position: absolute; inset: 30%; border: 3px solid var(--gr-teal); border-radius: 50%;
+}
+.cell.box::before {
+    content: ''; position: absolute; inset: 14%; background: var(--gr-amber);
+    border: 2px solid var(--gr-navy); border-radius: 4px; z-index: 1;
+}
+.cell.box.target::before { background: var(--gr-green); }
+.cell.player::before {
+    content: ''; position: absolute; inset: 19%; background: var(--gr-coral);
+    border: 2px solid #fff; border-radius: 50%; z-index: 2;
+}
+
+/* ---------- small screens ---------- */
+@media (max-width: 575.98px) {
+    .page-header h1 { font-size: 1.4rem; }
+    .stat-value { font-size: 1.4rem; }
+    .auth-card { padding: 1.25rem; }
+}
