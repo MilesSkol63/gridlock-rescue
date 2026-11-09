@@ -1,9 +1,9 @@
 <?php
 /**
- * levels.php  (REPLACES the placeholder)  - level selection for both roles (same page).
- *   regular user : completed / unlocked / locked cards; locked levels cannot be opened
- *   administrator: every level has a Test Play button (preview, nothing is saved)
- * Creating, editing and deleting levels is Deliverable 4.
+ * levels.php  (MODIFIED)  - level selection for both roles (same page).
+ *   regular user : completed / unlocked / locked cards
+ *   administrator: Test Play, Edit and Delete on every level, "+ New Level" button
+ * Delete is a POST action (CSRF + confirmation dialog); user_progress rows go with the level (ON DELETE CASCADE).
  */
 require_once 'includes/auth.php';
 
@@ -11,7 +11,49 @@ require_once 'includes/auth.php';
 
 $account  = require_login();
 $is_admin = ($account['role'] === 'admin');
-$levels   = get_levels_with_status($conn, (int) $account['user_id']);
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    require_admin();                       // regular users can never run level operations
+    verify_csrf();
+
+    if (post_string('action') === 'delete_level') {
+        $level_id = filter_var(post_string('id'), FILTER_VALIDATE_INT);
+        if ($level_id === false || $level_id < 1) {
+            set_flash('danger', 'Invalid level.');
+            redirect('levels.php');
+        }
+        try {
+            mysqli_begin_transaction($conn);
+            $target = db_select_one($conn, 'SELECT level_id, title FROM levels WHERE level_id = ? FOR UPDATE', 'i', [$level_id]);
+            if ($target === null) {
+                mysqli_rollback($conn);
+                set_flash('warning', 'That level no longer exists.');
+            } else {
+                $count = db_select_one($conn, 'SELECT COUNT(*) AS total FROM user_progress WHERE level_id = ?', 'i', [$level_id]);
+                db_execute($conn, 'DELETE FROM levels WHERE level_id = ?', 'i', [$level_id]);
+                mysqli_commit($conn);
+                set_flash('success', 'Level "' . $target['title'] . '" and ' . (int) $count['total'] . ' saved score(s) were deleted.');
+            }
+        } catch (mysqli_sql_exception $ex) {
+            mysqli_rollback($conn);
+            error_log('Gridlock Rescue: delete_level failed: ' . $ex->getMessage());
+            set_flash('danger', 'The level could not be deleted. Please try again.');
+        }
+    } else {
+        set_flash('danger', 'Unknown action.');
+    }
+    redirect('levels.php');
+}
+
+$levels = get_levels_with_status($conn, (int) $account['user_id']);
+
+// Admin only: how many saved scores each level has (shown in the delete warning)
+$score_counts = [];
+if ($is_admin) {
+    foreach (db_select_all($conn, 'SELECT level_id, COUNT(*) AS total FROM user_progress GROUP BY level_id') as $row) {
+        $score_counts[(int) $row['level_id']] = (int) $row['total'];
+    }
+}
 $active_page = 'levels';
 ?>
 <!DOCTYPE html>
@@ -35,17 +77,18 @@ $active_page = 'levels';
 
         <div class="page-header">
             <h1>Levels</h1>
-            <?php if ($is_admin): ?>
-            <span class="badge badge-role-admin">ADMIN PREVIEW</span>
-            <?php endif; ?>
+<?php if ($is_admin): ?>
+            <span class="badge badge-role-admin">ADMIN</span>
+            <a class="btn btn-primary ms-auto" href="level_form.php" id="new-level-button">+ New Level</a>
+<?php endif; ?>
         </div>
 
 <?php if ($is_admin): ?>
-        <p class="text-muted">Test Play opens any level without saving progress. Creating, editing and deleting levels arrives in Deliverable 4.</p>
+        <p class="text-muted">Test Play opens any level without saving progress. Deleting a level also deletes the saved scores of every player for that level.</p>
 <?php endif; ?>
 
 <?php if (empty($levels)): ?>
-        <div class="empty-state">No levels are available yet.</div>
+        <div class="empty-state">No levels are available yet.<?php echo $is_admin ? ' Use "+ New Level" to create one.' : ''; ?></div>
 <?php else: ?>
         <div class="row g-4" id="level-list">
     <?php foreach ($levels as $level): ?>
@@ -70,6 +113,7 @@ $active_page = 'levels';
                     <p class="level-note">
         <?php if ($is_admin): ?>
                         <?php echo ($level['par_moves'] !== null) ? 'Par: ' . (int) $level['par_moves'] . ' moves' : 'No par set'; ?>
+                        &middot; order <?php echo (int) $level['number']; ?>
         <?php elseif ($status === 'completed'): ?>
                         Best: <?php echo (int) $level['best_moves']; ?> moves
         <?php elseif ($status === 'unlocked'): ?>
@@ -78,11 +122,21 @@ $active_page = 'levels';
                         Finish the previous level first
         <?php endif; ?>
                     </p>
-        <?php if ($status === 'locked'): ?>
+        <?php if ($is_admin): ?>
+                    <div class="d-flex flex-wrap gap-2 mt-auto">
+                        <a class="btn btn-outline-navy btn-sm" href="play.php?id=<?php echo (int) $level['level_id']; ?>">Test Play</a>
+                        <a class="btn btn-outline-navy btn-sm" href="level_form.php?id=<?php echo (int) $level['level_id']; ?>">Edit</a>
+                        <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirm-modal"
+                                data-action="delete_level" data-id="<?php echo (int) $level['level_id']; ?>"
+                                data-title="Delete &quot;<?php echo e($level['title']); ?>&quot;?"
+                                data-message="This permanently deletes the level and its <?php echo (int) ($score_counts[(int) $level['level_id']] ?? 0); ?> saved player score(s) (the database cascades the delete). This cannot be undone."
+                                data-button="Delete level">Delete</button>
+                    </div>
+        <?php elseif ($status === 'locked'): ?>
                     <button type="button" class="btn btn-secondary" disabled>Locked</button>
         <?php else: ?>
                     <a class="btn <?php echo ($status === 'completed') ? 'btn-outline-navy' : 'btn-primary'; ?>" href="play.php?id=<?php echo (int) $level['level_id']; ?>"><?php
-                        echo $is_admin ? 'Test Play' : (($status === 'completed') ? 'Play Again' : 'Play'); ?></a>
+                        echo ($status === 'completed') ? 'Play Again' : 'Play'; ?></a>
         <?php endif; ?>
                 </article>
             </div>
@@ -91,7 +145,10 @@ $active_page = 'levels';
 <?php endif; ?>
     </main>
 
+    <?php include 'includes/confirm_modal.php'; ?>
+
     <footer class="site-footer">Gridlock Rescue - Endterm Project</footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/app.js"></script>
 </body>
 </html>

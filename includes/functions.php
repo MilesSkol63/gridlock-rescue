@@ -260,6 +260,133 @@ function get_user_rank($conn, $user_id)
     return ['rank' => (int) $ahead['ahead'] + 1, 'levels_done' => $done, 'total_moves' => $total];
 }
 
+/* ------------------------------------------------- account + level validation */
+
+/**
+ * Looks for a username or email that already belongs to ANOTHER account.
+ * $exclude_user_id = the account being edited (0 when creating a new one).
+ * Returns ['username' => message, 'email' => message] (only the keys that clash).
+ */
+function check_account_duplicates($conn, $username, $email, $exclude_user_id = 0)
+{
+    $errors = [];
+    $rows = db_select_all(
+        $conn,
+        'SELECT username, email FROM users WHERE (username = ? OR email = ?) AND user_id <> ?',
+        'ssi',
+        [$username, $email, (int) $exclude_user_id]
+    );
+    foreach ($rows as $row) {
+        if (strcasecmp($row['username'], $username) === 0) {
+            $errors['username'] = 'That username is already taken.';
+        }
+        if (strcasecmp($row['email'], $email) === 0) {
+            $errors['email'] = 'That email is already registered.';
+        }
+    }
+    return $errors;
+}
+
+define('LEVEL_MIN_SIZE', 3);    // smallest allowed width / height
+define('LEVEL_MAX_SIZE', 15);   // largest allowed width / height
+
+/**
+ * Validates a level layout typed into the level form.
+ * Returns ['errors' => [...], 'layout' => cleaned text, 'width', 'height', 'boxes', 'targets'].
+ * The layout is only acceptable when 'errors' is empty. Width, height and box count are
+ * calculated here from the text - the browser never supplies them.
+ */
+function analyse_level_layout($text)
+{
+    $info = ['errors' => [], 'layout' => '', 'width' => 0, 'height' => 0, 'boxes' => 0, 'targets' => 0];
+
+    $text = str_replace(["\r\n", "\r"], "\n", (string) $text);   // Windows line endings -> \n
+    $lines = explode("\n", $text);
+    foreach ($lines as $i => $line) {
+        $lines[$i] = rtrim($line, " \t");                        // ignore spaces at the end of a row
+    }
+    while (!empty($lines) && $lines[0] === '') {
+        array_shift($lines);                                     // ignore empty rows before the grid
+    }
+    while (!empty($lines) && end($lines) === '') {
+        array_pop($lines);                                       // ...and after it
+    }
+    if (empty($lines)) {
+        $info['errors'][] = 'The layout is empty.';
+        return $info;
+    }
+
+    $height = count($lines);
+    $width = strlen($lines[0]);
+    $allowed = '#-.$*@+';
+    $players = 0;
+    $boxes = 0;
+    $targets = 0;
+    $has_blank_row = false;
+    $uneven = false;
+    $bad_chars = [];
+    $loose_boxes = 0;                                            // boxes that do NOT start on a target
+
+    foreach ($lines as $line) {
+        if ($line === '') {
+            $has_blank_row = true;
+            continue;
+        }
+        if (strlen($line) !== $width) {
+            $uneven = true;
+        }
+        foreach (str_split($line) as $ch) {
+            if (strpos($allowed, $ch) === false) {
+                $bad_chars[$ch] = true;
+                continue;
+            }
+            if ($ch === '@' || $ch === '+') { $players++; }
+            if ($ch === '$' || $ch === '*') { $boxes++; }
+            if ($ch === '$') { $loose_boxes++; }
+            if ($ch === '.' || $ch === '*' || $ch === '+') { $targets++; }
+        }
+    }
+
+    if ($has_blank_row) {
+        $info['errors'][] = 'Remove empty rows from the middle of the layout.';
+    }
+    if (!empty($bad_chars)) {
+        $shown = [];
+        foreach (array_keys($bad_chars) as $ch) {
+            $shown[] = (ctype_print((string) $ch) && $ch !== ' ') ? (string) $ch : '(other character)';
+        }
+        $info['errors'][] = 'Invalid characters: ' . implode(' ', $shown) . '. Allowed: # - . $ * @ +';
+    }
+    if ($uneven) {
+        $info['errors'][] = 'All rows must have the same length.';
+    }
+    if ($width < LEVEL_MIN_SIZE || $height < LEVEL_MIN_SIZE) {
+        $info['errors'][] = 'The grid must be at least ' . LEVEL_MIN_SIZE . 'x' . LEVEL_MIN_SIZE . '.';
+    }
+    if ($width > LEVEL_MAX_SIZE || $height > LEVEL_MAX_SIZE) {
+        $info['errors'][] = 'The grid can be at most ' . LEVEL_MAX_SIZE . 'x' . LEVEL_MAX_SIZE . '.';
+    }
+    if ($players !== 1) {
+        $info['errors'][] = 'The layout needs exactly one player (@ or +). Found ' . $players . '.';
+    }
+    if ($boxes < 1) {
+        $info['errors'][] = 'The layout needs at least one box ($ or *).';
+    }
+    if ($boxes !== $targets) {
+        $info['errors'][] = 'Boxes and targets must match: found ' . $boxes . ' boxes and ' . $targets . ' targets.';
+    }
+    if ($boxes >= 1 && $boxes === $targets && $loose_boxes === 0) {
+        $info['errors'][] = 'Every box already starts on a target, so the level is already solved.';
+    }
+
+    $info['layout'] = implode("\n", $lines);
+    $info['width'] = $width;
+    $info['height'] = $height;
+    $info['boxes'] = $boxes;
+    $info['targets'] = $targets;
+    return $info;
+}
+
 /* --------------------------------------------------------------- UI helpers */
 
 /** Bootstrap-friendly CSS class for a difficulty badge. */

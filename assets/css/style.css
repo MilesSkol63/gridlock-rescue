@@ -510,3 +510,58 @@ button:focus-visible {
   grid-column: 3;
   grid-row: 2;
 }
+
+/* =====================  Deliverable 4: management pages  ===================== */
+.form-card {
+  max-width: 640px;
+}
+.layout-input {
+  font-family: "Roboto Mono", Consolas, "Courier New", monospace;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  white-space: pre;
+  overflow-x: auto;
+}
+.legend-text {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.85rem;
+  background: #f4f6f8;
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+}
+.preview-wrap {
+  overflow-x: auto;
+  padding: 0.25rem 0;
+}
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--gr-navy);
+  color: #fff;
+  font:
+    600 1.4rem "Poppins",
+    sans-serif;
+}
+.danger-zone {
+  border-color: var(--gr-coral);
+}
+.btn-danger {
+  --bs-btn-bg: var(--gr-coral);
+  --bs-btn-border-color: var(--gr-coral);
+  --bs-btn-hover-bg: #c9461f;
+  --bs-btn-hover-border-color: #c9461f;
+  --bs-btn-active-bg: #b53d1a;
+  --bs-btn-active-border-color: #b53d1a;
+}
+.btn-outline-danger {
+  --bs-btn-color: var(--gr-coral);
+  --bs-btn-border-color: var(--gr-coral);
+  --bs-btn-hover-bg: var(--gr-coral);
+  --bs-btn-hover-border-color: var(--gr-coral);
+  --bs-btn-active-bg: #c9461f;
+  --bs-btn-active-border-color: #c9461f;
+}
