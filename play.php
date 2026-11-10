@@ -135,11 +135,13 @@ $active_page = 'levels';
                     <p class="small mb-3"><?php echo e($level['hint']); ?></p>
 <?php endif; ?>
 
-                    <div class="dpad d-lg-none" aria-label="On-screen controls">
-                        <button type="button" class="btn btn-outline-navy dpad-btn dpad-up" data-dir="up" aria-label="Move up">&uarr;</button>
-                        <button type="button" class="btn btn-outline-navy dpad-btn dpad-left" data-dir="left" aria-label="Move left">&larr;</button>
-                        <button type="button" class="btn btn-outline-navy dpad-btn dpad-down" data-dir="down" aria-label="Move down">&darr;</button>
-                        <button type="button" class="btn btn-outline-navy dpad-btn dpad-right" data-dir="right" aria-label="Move right">&rarr;</button>
+                    <div class="dpad-container">
+                        <div class="dpad d-lg-none" aria-label="On-screen controls">
+                            <button type="button" class="btn btn-outline-navy dpad-btn dpad-up" data-dir="up" aria-label="Move up">&uarr;</button>
+                            <button type="button" class="btn btn-outline-navy dpad-btn dpad-left" data-dir="left" aria-label="Move left">&larr;</button>
+                            <button type="button" class="btn btn-outline-navy dpad-btn dpad-down" data-dir="down" aria-label="Move down">&darr;</button>
+                            <button type="button" class="btn btn-outline-navy dpad-btn dpad-right" data-dir="right" aria-label="Move right">&rarr;</button>
+                        </div>
                     </div>
                 </aside>
             </div>
