@@ -1,0 +1,452 @@
+[
+  {
+    "id": 1,
+    "name": "First Response",
+    "difficulty": "Easy",
+    "hint": "Clear the blue truck in front of the exit, then drive out.",
+    "rows": [
+      "D..A..",
+      "D..A.C",
+      ".RRA.C",
+      "..EEE.",
+      "..BB..",
+      "......"
+    ],
+    "best": 5,
+    "metrics": {
+      "vehicles": 6,
+      "laneBlockers": 2,
+      "movers": 5,
+      "revisits": 0
+    },
+    "solution": [
+      [
+        "B",
+        0
+      ],
+      [
+        "C",
+        0
+      ],
+      [
+        "E",
+        0
+      ],
+      [
+        "A",
+        3
+      ],
+      [
+        "R",
+        6
+      ]
+    ]
+  },
+  {
+    "id": 2,
+    "name": "Crosstown Jam",
+    "difficulty": "Medium",
+    "hint": "Several vehicles block each other. Free the middle first.",
+    "rows": [
+      "....IG",
+      ".BB.IG",
+      "CRRHIA",
+      "C.DH.A",
+      "C.DFFF",
+      "EEE..."
+    ],
+    "best": 10,
+    "metrics": {
+      "vehicles": 10,
+      "laneBlockers": 3,
+      "movers": 9,
+      "revisits": 1
+    },
+    "solution": [
+      [
+        "B",
+        0
+      ],
+      [
+        "E",
+        1
+      ],
+      [
+        "C",
+        3
+      ],
+      [
+        "H",
+        0
+      ],
+      [
+        "R",
+        0
+      ],
+      [
+        "D",
+        0
+      ],
+      [
+        "F",
+        1
+      ],
+      [
+        "A",
+        3
+      ],
+      [
+        "I",
+        3
+      ],
+      [
+        "R",
+        6
+      ]
+    ]
+  },
+  {
+    "id": 3,
+    "name": "Delivery Day",
+    "difficulty": "Medium",
+    "hint": "Almost every vehicle has to move once. Find the right order.",
+    "rows": [
+      "FFF.E.",
+      "CCC.EH",
+      "RRB.EH",
+      "..BII.",
+      ".AA.GG",
+      ".DD..."
+    ],
+    "best": 12,
+    "metrics": {
+      "vehicles": 10,
+      "laneBlockers": 3,
+      "movers": 10,
+      "revisits": 2
+    },
+    "solution": [
+      [
+        "A",
+        0
+      ],
+      [
+        "D",
+        0
+      ],
+      [
+        "B",
+        4
+      ],
+      [
+        "I",
+        0
+      ],
+      [
+        "B",
+        2
+      ],
+      [
+        "G",
+        2
+      ],
+      [
+        "E",
+        3
+      ],
+      [
+        "F",
+        3
+      ],
+      [
+        "H",
+        3
+      ],
+      [
+        "C",
+        3
+      ],
+      [
+        "B",
+        0
+      ],
+      [
+        "R",
+        6
+      ]
+    ]
+  },
+  {
+    "id": 4,
+    "name": "Truck Convoy",
+    "difficulty": "Hard",
+    "hint": "Long trucks form a wall in front of the exit. Take them out one by one.",
+    "rows": [
+      ".HAF.C",
+      ".HAFIC",
+      "RRAFI.",
+      "GG..I.",
+      "J..BBD",
+      "J..EED"
+    ],
+    "best": 14,
+    "metrics": {
+      "vehicles": 11,
+      "laneBlockers": 3,
+      "movers": 8,
+      "revisits": 6
+    },
+    "solution": [
+      [
+        "I",
+        0
+      ],
+      [
+        "G",
+        3
+      ],
+      [
+        "A",
+        3
+      ],
+      [
+        "R",
+        1
+      ],
+      [
+        "J",
+        0
+      ],
+      [
+        "R",
+        0
+      ],
+      [
+        "A",
+        0
+      ],
+      [
+        "B",
+        0
+      ],
+      [
+        "E",
+        0
+      ],
+      [
+        "G",
+        0
+      ],
+      [
+        "A",
+        3
+      ],
+      [
+        "F",
+        3
+      ],
+      [
+        "I",
+        3
+      ],
+      [
+        "R",
+        6
+      ]
+    ]
+  },
+  {
+    "id": 5,
+    "name": "Bottleneck",
+    "difficulty": "Hard",
+    "hint": "Only one truck blocks the exit, but freeing it takes a long chain of moves.",
+    "rows": [
+      "BEEE.D",
+      "BJ..GD",
+      ".JRRG.",
+      "K.CCGH",
+      "K.ALLH",
+      "FFAII."
+    ],
+    "best": 17,
+    "metrics": {
+      "vehicles": 13,
+      "laneBlockers": 1,
+      "movers": 9,
+      "revisits": 8
+    },
+    "solution": [
+      [
+        "D",
+        1
+      ],
+      [
+        "G",
+        0
+      ],
+      [
+        "C",
+        3
+      ],
+      [
+        "J",
+        3
+      ],
+      [
+        "R",
+        0
+      ],
+      [
+        "A",
+        1
+      ],
+      [
+        "C",
+        2
+      ],
+      [
+        "I",
+        2
+      ],
+      [
+        "L",
+        2
+      ],
+      [
+        "G",
+        3
+      ],
+      [
+        "E",
+        3
+      ],
+      [
+        "A",
+        0
+      ],
+      [
+        "R",
+        3
+      ],
+      [
+        "A",
+        1
+      ],
+      [
+        "E",
+        1
+      ],
+      [
+        "D",
+        0
+      ],
+      [
+        "R",
+        6
+      ]
+    ]
+  },
+  {
+    "id": 6,
+    "name": "Gridlock Gauntlet",
+    "difficulty": "Expert",
+    "hint": "Every move unlocks another. Plan the order before you start.",
+    "rows": [
+      "CFF.DD",
+      "C..HHH",
+      "GRRK..",
+      "GLLK.A",
+      "..IJJA",
+      "BBIEEA"
+    ],
+    "best": 20,
+    "metrics": {
+      "vehicles": 13,
+      "laneBlockers": 1,
+      "movers": 12,
+      "revisits": 8
+    },
+    "solution": [
+      [
+        "D",
+        3
+      ],
+      [
+        "H",
+        1
+      ],
+      [
+        "A",
+        0
+      ],
+      [
+        "E",
+        4
+      ],
+      [
+        "J",
+        4
+      ],
+      [
+        "K",
+        4
+      ],
+      [
+        "L",
+        4
+      ],
+      [
+        "I",
+        3
+      ],
+      [
+        "B",
+        1
+      ],
+      [
+        "G",
+        4
+      ],
+      [
+        "C",
+        2
+      ],
+      [
+        "H",
+        0
+      ],
+      [
+        "K",
+        1
+      ],
+      [
+        "E",
+        3
+      ],
+      [
+        "J",
+        3
+      ],
+      [
+        "L",
+        3
+      ],
+      [
+        "A",
+        3
+      ],
+      [
+        "D",
+        4
+      ],
+      [
+        "K",
+        0
+      ],
+      [
+        "R",
+        6
+      ]
+    ]
+  }
+]

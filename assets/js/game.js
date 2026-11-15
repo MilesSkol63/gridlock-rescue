@@ -1,327 +1,379 @@
 /**
- * assets/js/game.js  (NEW)  - Gridlock Rescue game engine + page wiring.
- *
- * Part 1 (createEngine) is pure game logic with NO browser code, so it can also be tested in Node.
- * Part 2 (startGame) connects the engine to play.php: keyboard, buttons, drawing and saving.
- *
- * Event loop (turn based, no timers):
- *   Player input -> validate move -> update state -> render -> check win -> save if won
- *
- * Coordinates are always (row, col); row 0 is the TOP row, so "up" means row - 1.
- * Level text: # wall  - floor  . target  $ box  * box on target  @ player  + player on target
- * Rules: only successful moves count; undo subtracts one; restart resets to 0.
+ * assets/js/game.js  (REPLACED - was the Sokoban engine)  - rendering and input for the sliding-block game on play.php.
+ * Every move is validated by GridlockEngine (assets/js/sliding-engine.js). The level comes from the database as JSON
+ * (#level-data). When the rescue vehicle leaves the board, the accepted slides are sent to save_progress.php, which
+ * replays them on the server before anything is stored.
  */
-
-/* ============================== PART 1: ENGINE ============================== */
-
-function createEngine(layoutText) {
+(function () {
   "use strict";
 
-  // ---- static layer: never changes after parsing ----
-  const lines = String(layoutText)
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .filter(function (l) {
-      return l.length > 0;
-    });
-  const rows = lines.length;
-  let cols = 0;
-  lines.forEach(function (l) {
-    cols = Math.max(cols, l.length);
-  });
-
-  const wall = [];
-  const target = [];
-  let startPlayer = null;
-  const startBoxes = [];
-  let playerCount = 0;
-  let targetCount = 0;
-
-  for (let r = 0; r < rows; r++) {
-    wall.push([]);
-    target.push([]);
-    for (let c = 0; c < cols; c++) {
-      const ch = c < lines[r].length ? lines[r][c] : "#"; // short rows are padded with wall
-      wall[r][c] = ch === "#";
-      target[r][c] = ch === "." || ch === "*" || ch === "+";
-      if (target[r][c]) {
-        targetCount++;
-      }
-      if (ch === "@" || ch === "+") {
-        startPlayer = { row: r, col: c };
-        playerCount++;
-      }
-      if (ch === "$" || ch === "*") {
-        startBoxes.push({ row: r, col: c });
-      }
-    }
+  var dataEl = document.getElementById("level-data");
+  if (!dataEl || !window.GridlockEngine) {
+    return;
   }
+  var E = window.GridlockEngine;
+  var data = JSON.parse(dataEl.textContent);
 
-  let error = "";
-  if (rows === 0) {
-    error = "The level is empty.";
-  } else if (playerCount !== 1) {
-    error = "The level must contain exactly one player.";
-  } else if (startBoxes.length === 0) {
-    error = "The level has no boxes.";
-  } else if (startBoxes.length !== targetCount) {
-    error = "The level needs the same number of boxes and targets.";
-  }
+  var INSET = 4; // gap between a vehicle and its cell edge (px)
+  var EXIT_W = 32; // must match .sl-frame in style.css
+  var FRAME_W = 12;
+  var COLORS = [
+    "#4A90D9",
+    "#F2B134",
+    "#3DBE7A",
+    "#8E6BD8",
+    "#EE8A3C",
+    "#2BB5C9",
+    "#D96BA5",
+    "#8FA3B8",
+    "#6BAA3A",
+    "#C9A227",
+    "#5F6FD8",
+    "#B5651D",
+  ];
 
-  // ---- dynamic layer: changes every move ----
-  let player = null;
-  let boxes = [];
-  let history = []; // one snapshot per successful move; moves === history.length
-  let won = false;
-
-  function isWall(r, c) {
-    return r < 0 || c < 0 || r >= rows || c >= cols || wall[r][c]; // outside the grid counts as wall
-  }
-  function isTarget(r, c) {
-    return !isWall(r, c) && target[r][c];
-  }
-  function findBox(r, c) {
-    for (let i = 0; i < boxes.length; i++) {
-      if (boxes[i].row === r && boxes[i].col === c) {
-        return i;
-      }
-    }
-    return -1;
-  }
-  function snapshot() {
-    return {
-      player: { row: player.row, col: player.col },
-      boxes: boxes.map(function (b) {
-        return { row: b.row, col: b.col };
-      }),
-    };
-  }
-  function allBoxesOnTargets() {
-    return (
-      boxes.length > 0 &&
-      boxes.every(function (b) {
-        return isTarget(b.row, b.col);
-      })
-    );
-  }
-
-  function restart() {
-    if (error) {
-      return;
-    }
-    player = { row: startPlayer.row, col: startPlayer.col };
-    boxes = startBoxes.map(function (b) {
-      return { row: b.row, col: b.col };
-    });
-    history = [];
-    won = false;
-  }
-
-  /** Try to move the player by (dr, dc). Returns 'blocked', 'moved' or 'pushed'. */
-  function tryMove(dr, dc) {
-    if (error || won) {
-      return "blocked";
-    }
-
-    const nextR = player.row + dr;
-    const nextC = player.col + dc;
-    if (isWall(nextR, nextC)) {
-      return "blocked";
-    }
-
-    const boxIndex = findBox(nextR, nextC);
-    let result = "moved";
-    if (boxIndex !== -1) {
-      const beyondR = nextR + dr;
-      const beyondC = nextC + dc;
-      if (isWall(beyondR, beyondC) || findBox(beyondR, beyondC) !== -1) {
-        return "blocked"; // wall or another box behind it: no move, no count
-      }
-      history.push(snapshot()); // save state BEFORE changing anything
-      boxes[boxIndex] = { row: beyondR, col: beyondC };
-      result = "pushed";
-    } else {
-      history.push(snapshot());
-    }
-    player = { row: nextR, col: nextC };
-    if (allBoxesOnTargets()) {
-      won = true;
-    }
-    return result;
-  }
-
-  function undo() {
-    if (error || won || history.length === 0) {
-      return false;
-    }
-    const snap = history.pop();
-    player = { row: snap.player.row, col: snap.player.col };
-    boxes = snap.boxes.map(function (b) {
-      return { row: b.row, col: b.col };
-    });
-    return true;
-  }
-
-  restart();
-
-  return {
-    error: error,
-    rows: rows,
-    cols: cols,
-    isWall: isWall,
-    isTarget: isTarget,
-    findBox: findBox,
-    tryMove: tryMove,
-    undo: undo,
-    restart: restart,
-    getPlayer: function () {
-      return { row: player.row, col: player.col };
-    },
-    getBoxes: function () {
-      return boxes.map(function (b) {
-        return { row: b.row, col: b.col };
-      });
-    },
-    getMoves: function () {
-      return history.length;
-    },
-    canUndo: function () {
-      return !won && history.length > 0;
-    },
-    isWon: function () {
-      return won;
-    },
+  var $ = function (id) {
+    return document.getElementById(id);
   };
-}
+  var boardEl = $("game-board"),
+    area = $("board-area"),
+    moveEl = $("move-count"),
+    undoBtn = $("btn-undo"),
+    restartBtn = $("btn-restart"),
+    overlay = $("win-overlay"),
+    winStatus = $("win-status"),
+    nextBtn = $("btn-next"),
+    retryBtn = $("btn-retry"),
+    replayBtn = $("btn-replay"),
+    newBest = $("win-new-best");
 
-/* ============================ PART 2: PAGE WIRING ============================ */
+  var game,
+    els = {},
+    cell = 72,
+    selectedId = null,
+    kbChain = null,
+    drag = null,
+    busy = false,
+    saving = false,
+    needsReload = false;
+  var bestMoves = data.bestMoves; // null until this player completes the level (always null in admin preview)
+  var finalMoves = 0,
+    finalSlides = [];
 
-function startGame() {
-  "use strict";
+  var pos = function (v) {
+    return v.orient === "H" ? v.col : v.row;
+  };
 
-  const data = JSON.parse(document.getElementById("level-data").textContent);
-  const engine = createEngine(data.layout);
-
-  const boardEl = document.getElementById("game-board");
-  const wrapEl = document.getElementById("board-wrap");
-  const moveEl = document.getElementById("move-count");
-  const bestEl = document.getElementById("best-moves");
-  const undoBtn = document.getElementById("btn-undo");
-  const restartBtn = document.getElementById("btn-restart");
-  const overlay = document.getElementById("win-overlay");
-  const winMovesEl = document.getElementById("win-moves");
-  const winStatusEl = document.getElementById("win-status");
-  const newBestEl = document.getElementById("win-new-best");
-  const nextBtn = document.getElementById("btn-next");
-  const replayBtn = document.getElementById("btn-replay");
-  const retryBtn = document.getElementById("btn-retry");
-
-  let bestMoves = data.bestMoves; // null when not completed yet (or admin preview)
-  let finalMoves = 0; // move count at the moment of winning
-  let saving = false;
-
-  if (engine.error) {
-    boardEl.textContent = "This level cannot be played: " + engine.error;
+  try {
+    game = E.createGame(data.rows);
+  } catch (err) {
+    boardEl.textContent = "This level cannot be played: " + err.message;
     undoBtn.disabled = true;
     restartBtn.disabled = true;
     return;
   }
 
-  /* ---- rendering ---- */
-  function fitCellSize() {
-    const available = wrapEl.clientWidth - 32;
-    const size = Math.floor(available / engine.cols);
-    const cell = Math.max(22, Math.min(56, size));
-    boardEl.style.setProperty("--cell", cell + "px");
+  /* ---------- sizing ---------- */
+  function computeCellSize(areaWidth) {
+    var avail = Math.min(areaWidth, 640) - FRAME_W - EXIT_W - 4;
+    return Math.max(32, Math.min(84, Math.floor(avail / 6)));
+  }
+  function fitBoard() {
+    cell = computeCellSize(area.clientWidth);
+    area.style.setProperty("--cell", cell + "px");
+    placeAll(false);
   }
 
-  function render() {
-    const p = engine.getPlayer();
-    const boxes = engine.getBoxes();
-    boardEl.style.setProperty("--cols", engine.cols);
+  /* ---------- board ---------- */
+  function buildVehicles() {
     boardEl.innerHTML = "";
-    for (let r = 0; r < engine.rows; r++) {
-      for (let c = 0; c < engine.cols; c++) {
-        const cell = document.createElement("div");
-        let cls = engine.isWall(r, c) ? "cell wall" : "cell floor";
-        if (engine.isTarget(r, c)) {
-          cls += " target";
-        }
-        if (engine.findBox(r, c) !== -1) {
-          cls += " box";
-        }
-        if (p.row === r && p.col === c) {
-          cls += " player";
-        }
-        cell.className = cls;
-        boardEl.appendChild(cell);
+    els = {};
+    var colorIndex = 0;
+    game.getVehicles().forEach(function (v) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className =
+        "sl-vehicle " +
+        (v.orient === "H" ? "h" : "v") +
+        " len" +
+        v.length +
+        (v.rescue ? " rescue" : "");
+      if (!v.rescue) {
+        b.style.setProperty("--body", COLORS[colorIndex++ % COLORS.length]);
       }
-    }
-    moveEl.textContent = engine.getMoves();
-    bestEl.textContent = bestMoves === null ? "\u2014" : bestMoves;
-    undoBtn.disabled = !engine.canUndo();
-    boardEl.setAttribute(
-      "aria-label",
-      "Puzzle board, " +
-        engine.getMoves() +
-        " moves, " +
-        boxes.length +
-        " boxes",
-    );
+      b.dataset.id = v.id;
+      [
+        ["glass"],
+        v.length === 3 ? ["glass2"] : null,
+        ["lamp a"],
+        ["lamp b"],
+        v.rescue ? ["siren-bar"] : null,
+      ].forEach(function (p) {
+        if (p) {
+          var s = document.createElement("span");
+          s.className = p[0];
+          b.appendChild(s);
+        }
+      });
+      attachInput(b, v.id);
+      boardEl.appendChild(b);
+      els[v.id] = b;
+    });
+    placeAll(false);
   }
 
-  /* ---- one turn: input -> validate -> update -> render -> check win ---- */
-  function handleMove(dr, dc) {
-    const result = engine.tryMove(dr, dc);
-    if (result === "blocked") {
+  function setTransform(el, v, p) {
+    var x = (v.orient === "H" ? p : v.col) * cell + INSET;
+    var y = (v.orient === "H" ? v.row : p) * cell + INSET;
+    el.style.width =
+      (v.orient === "H" ? v.length * cell : cell) - 2 * INSET + "px";
+    el.style.height =
+      (v.orient === "H" ? cell : v.length * cell) - 2 * INSET + "px";
+    el.style.transform = "translate(" + x + "px," + y + "px)";
+  }
+
+  function placeAll(animate) {
+    game.getVehicles().forEach(function (v) {
+      var el = els[v.id];
+      if (!el) {
+        return;
+      }
+      if (!animate) {
+        el.style.transition = "none";
+      }
+      setTransform(el, v, pos(v));
+      if (!animate) {
+        void el.offsetWidth;
+        el.style.transition = "";
+      }
+      el.setAttribute(
+        "aria-label",
+        (v.rescue ? "Red rescue vehicle" : "Vehicle " + v.id) +
+          ", " +
+          (v.orient === "H" ? "moves left and right" : "moves up and down") +
+          ", row " +
+          (v.row + 1) +
+          ", column " +
+          (v.col + 1),
+      );
+    });
+  }
+
+  function updateHud() {
+    moveEl.textContent = game.getMoves();
+    undoBtn.disabled = !game.canUndo() || busy;
+  }
+
+  function select(id) {
+    if (selectedId !== id) {
+      kbChain = null;
+    }
+    selectedId = id;
+    Object.keys(els).forEach(function (k) {
+      els[k].classList.toggle("selected", k === id);
+    });
+  }
+  function shake(id) {
+    var el = els[id];
+    if (!el) {
       return;
-    } // blocked moves change nothing and are not counted
-    render();
-    if (engine.isWon()) {
-      winLevel();
     }
+    el.classList.remove("blocked");
+    void el.offsetWidth;
+    el.classList.add("blocked");
   }
 
-  function handleUndo() {
-    if (engine.undo()) {
-      render();
+  /* ---------- moves (always validated by the engine) ---------- */
+  function doSlide(id, target, merge) {
+    var res = game.slide(id, target, { merge: merge });
+    if (!res.ok) {
+      if (res.reason === "blocked") {
+        shake(id);
+      }
+      placeAll(true);
+      return res;
     }
+    placeAll(true);
+    updateHud();
+    if (res.exited) {
+      handleWin();
+    }
+    return res;
   }
 
-  function handleRestart() {
-    if (saving) {
+  function attachInput(el, id) {
+    el.addEventListener("focus", function () {
+      select(id);
+    });
+    el.addEventListener("pointerdown", function (e) {
+      if (game.isWon() || busy || e.button > 0) {
+        return;
+      }
+      var v = game.getVehicle(id);
+      el.setPointerCapture(e.pointerId);
+      drag = {
+        id: id,
+        v: v,
+        x: e.clientX,
+        y: e.clientY,
+        start: pos(v),
+        range: game.range(id),
+        f: pos(v),
+        moved: false,
+      };
+      kbChain = null;
+      select(id);
+      el.classList.add("dragging");
+    });
+    el.addEventListener("pointermove", function (e) {
+      if (!drag || drag.id !== id) {
+        return;
+      }
+      var delta =
+        drag.v.orient === "H" ? e.clientX - drag.x : e.clientY - drag.y;
+      if (Math.abs(delta) > 4) {
+        drag.moved = true;
+      }
+      drag.f = Math.max(
+        drag.range.min,
+        Math.min(drag.range.max, drag.start + delta / cell),
+      );
+      setTransform(el, drag.v, drag.f);
+    });
+    var finish = function (e) {
+      if (!drag || drag.id !== id) {
+        return;
+      }
+      var d = drag;
+      drag = null;
+      el.classList.remove("dragging");
+      if (e.type === "pointercancel" || !d.moved) {
+        placeAll(true);
+        return;
+      }
+      var target = Math.round(d.f);
+      if (target === d.start) {
+        placeAll(true);
+        return;
+      }
+      doSlide(id, target, false); // the engine re-checks the whole slide
+    };
+    el.addEventListener("pointerup", finish);
+    el.addEventListener("pointercancel", finish);
+  }
+
+  document.addEventListener("keydown", function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) {
       return;
-    } // wait until the result of the finished game is saved
-    engine.restart();
+    }
+    var tag = e.target && e.target.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+      return;
+    }
+    var k = e.key;
+    if (k === "z" || k === "Z") {
+      doUndo();
+      return;
+    }
+    if (k === "r" || k === "R") {
+      doRestart();
+      return;
+    }
+    var dir = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[k];
+    if (!dir || !selectedId || game.isWon() || busy) {
+      return;
+    }
+    var v = game.getVehicle(selectedId);
+    var horizontalKey = k === "ArrowLeft" || k === "ArrowRight";
+    if ((v.orient === "H") !== horizontalKey) {
+      e.preventDefault();
+      shake(selectedId);
+      return;
+    } // wrong axis
+    e.preventDefault();
+    var range = game.range(selectedId),
+      cur = pos(v);
+    var target = e.shiftKey ? (dir > 0 ? range.max : range.min) : cur + dir;
+    var merge =
+      !e.shiftKey &&
+      kbChain &&
+      kbChain.id === selectedId &&
+      kbChain.dir === dir;
+    var res = doSlide(selectedId, target, merge);
+    kbChain = res.ok && !e.shiftKey ? { id: selectedId, dir: dir } : null;
+  });
+
+  function doUndo() {
+    if (busy || !game.undo()) {
+      return;
+    }
+    kbChain = null;
+    placeAll(true);
+    updateHud();
+  }
+  function doRestart() {
+    if (needsReload) {
+      window.location.reload();
+      return;
+    }
+    if (busy || saving) {
+      return;
+    }
+    game.restart();
+    kbChain = null;
     overlay.classList.add("d-none");
-    newBestEl.classList.add("d-none");
+    newBest.classList.add("d-none");
     retryBtn.classList.add("d-none");
+    retryBtn.textContent = "Retry Save";
+    needsReload = false;
     nextBtn.classList.add("d-none");
-    render();
+    Object.keys(els).forEach(function (k) {
+      els[k].classList.remove("exiting");
+    });
+    placeAll(false);
+    updateHud();
+    select("R");
   }
 
-  /* ---- winning and saving ---- */
-  function winLevel() {
-    finalMoves = engine.getMoves();
-    winMovesEl.textContent = finalMoves;
-    overlay.classList.remove("d-none");
-    nextBtn.classList.add("d-none");
-    retryBtn.classList.add("d-none");
-    newBestEl.classList.add("d-none");
-
-    if (!data.canSave) {
-      winStatusEl.textContent = "Admin preview: nothing was saved.";
-      if (data.nextLevelId) {
-        nextBtn.classList.remove("d-none");
-      }
-      nextBtn.focus();
-      return;
+  /* ---------- victory and saving ---------- */
+  function ratingText(moves) {
+    if (moves <= data.par) {
+      return "Perfect rescue - optimal solution!";
     }
-    saveResult();
+    if (moves <= data.par + 3) {
+      return "Great rescue! Almost optimal.";
+    }
+    return "Rescued! Can you do it in fewer moves?";
+  }
+
+  function handleWin() {
+    busy = true;
+    finalMoves = game.getMoves();
+    finalSlides = game.getHistory(); // undo and restart are already applied
+    els.R.classList.add("exiting");
+    updateHud();
+    window.setTimeout(function () {
+      $("win-moves").textContent = finalMoves;
+      $("win-rating").textContent = ratingText(finalMoves);
+      overlay.classList.remove("d-none");
+      nextBtn.classList.add("d-none");
+      retryBtn.classList.add("d-none");
+      newBest.classList.add("d-none");
+      busy = false;
+      if (!data.canSave) {
+        winStatus.textContent = "Admin preview: nothing was saved.";
+        if (data.nextLevelId) {
+          nextBtn.classList.remove("d-none");
+          nextBtn.focus();
+        }
+        return;
+      }
+      saveResult();
+    }, 750);
   }
 
   function showSaveFailure(message) {
-    winStatusEl.textContent = message;
+    winStatus.textContent = message;
     retryBtn.classList.remove("d-none");
     retryBtn.focus();
   }
@@ -329,11 +381,10 @@ function startGame() {
   function saveResult() {
     if (saving) {
       return;
-    } // ignore double clicks while a request is running
+    }
     saving = true;
     retryBtn.classList.add("d-none");
-    winStatusEl.textContent = "Saving...";
-
+    winStatus.textContent = "Saving...";
     fetch(data.saveUrl, {
       method: "POST",
       credentials: "same-origin",
@@ -341,16 +392,22 @@ function startGame() {
         "Content-Type": "application/json",
         "X-CSRF-Token": data.csrf,
       },
-      // Only the level and the move count are sent. The server decides WHO the player is.
-      body: JSON.stringify({ level_id: data.levelId, moves: finalMoves }),
+      // The layout hash prevents an already-open game from saving against a board
+      // that an administrator changed after the player loaded this page.
+      // The server still replays every accepted slide and decides who the player is.
+      body: JSON.stringify({
+        level_id: data.levelId,
+        layout_hash: data.layoutHash,
+        moves: finalSlides,
+      }),
     })
       .then(function (response) {
         return response.json().then(
           function (body) {
-            return { ok: response.ok, body: body };
+            return { ok: response.ok, status: response.status, body: body };
           },
           function () {
-            return { ok: false, body: null };
+            return { ok: false, status: response.status, body: null };
           },
         );
       })
@@ -358,16 +415,26 @@ function startGame() {
         saving = false;
         if (reply.ok && reply.body && reply.body.success) {
           bestMoves = reply.body.best_moves;
-          winStatusEl.textContent = reply.body.message;
+          $("your-best").textContent = bestMoves;
+          winStatus.textContent = reply.body.message;
           if (reply.body.is_new_best) {
-            newBestEl.classList.remove("d-none");
+            newBest.classList.remove("d-none");
           }
           if (reply.body.next_level_id) {
             nextBtn.classList.remove("d-none");
             nextBtn.focus();
           }
-          bestEl.textContent = bestMoves;
+        } else if (reply.status === 409) {
+          needsReload = true;
+          winStatus.textContent =
+            reply.body && reply.body.message
+              ? reply.body.message
+              : "This level has changed. Reload it before playing again.";
+          retryBtn.textContent = "Reload Level";
+          retryBtn.classList.remove("d-none");
+          retryBtn.focus();
         } else {
+          retryBtn.textContent = "Retry Save";
           showSaveFailure(
             reply.body && reply.body.message
               ? reply.body.message
@@ -377,77 +444,36 @@ function startGame() {
       })
       .catch(function () {
         saving = false;
+        retryBtn.textContent = "Retry Save";
         showSaveFailure("Network problem: your progress was not saved.");
       });
   }
 
-  /* ---- input ---- */
-  const KEY_DIRECTIONS = {
-    ArrowUp: [-1, 0],
-    w: [-1, 0],
-    W: [-1, 0],
-    ArrowDown: [1, 0],
-    s: [1, 0],
-    S: [1, 0],
-    ArrowLeft: [0, -1],
-    a: [0, -1],
-    A: [0, -1],
-    ArrowRight: [0, 1],
-    d: [0, 1],
-    D: [0, 1],
-  };
-
-  document.addEventListener("keydown", function (event) {
-    if (event.ctrlKey || event.metaKey || event.altKey) {
+  undoBtn.addEventListener("click", doUndo);
+  restartBtn.addEventListener("click", doRestart);
+  replayBtn.addEventListener("click", doRestart);
+  retryBtn.addEventListener("click", function () {
+    if (needsReload) {
+      window.location.reload();
       return;
     }
-    const tag = event.target && event.target.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
-      return;
-    }
-
-    const dir = KEY_DIRECTIONS[event.key];
-    if (dir) {
-      event.preventDefault(); // arrow keys must not scroll the page
-      handleMove(dir[0], dir[1]);
-    } else if (event.key === "z" || event.key === "Z") {
-      handleUndo();
-    } else if (event.key === "r" || event.key === "R") {
-      handleRestart();
-    }
+    saveResult();
   });
-
-  document.querySelectorAll("[data-dir]").forEach(function (btn) {
-    btn.addEventListener("click", function () {
-      const d = { up: [-1, 0], down: [1, 0], left: [0, -1], right: [0, 1] }[
-        btn.getAttribute("data-dir")
-      ];
-      handleMove(d[0], d[1]);
-    });
-  });
-
-  undoBtn.addEventListener("click", handleUndo);
-  restartBtn.addEventListener("click", handleRestart);
-  replayBtn.addEventListener("click", handleRestart);
-  retryBtn.addEventListener("click", saveResult);
   nextBtn.addEventListener("click", function () {
     window.location.href =
       data.playUrl + "?id=" + encodeURIComponent(data.nextLevelId);
   });
-  window.addEventListener("resize", fitCellSize);
+  window.addEventListener("resize", fitBoard);
 
-  fitCellSize();
-  render();
-}
-
-if (typeof document !== "undefined") {
-  document.addEventListener("DOMContentLoaded", function () {
-    // game.js is also loaded by level_form.php (for the preview); only start a game when a level is present
-    if (document.getElementById("level-data")) {
-      startGame();
-    }
-  });
-}
-if (typeof module !== "undefined") {
-  module.exports = { createEngine: createEngine };
-}
+  window.GridlockGame = {
+    computeCellSize: computeCellSize,
+    EXIT_W: EXIT_W,
+    FRAME_W: FRAME_W,
+  };
+  $("best-known").textContent = data.par;
+  $("your-best").innerHTML = bestMoves === null ? "&mdash;" : bestMoves;
+  buildVehicles();
+  fitBoard();
+  updateHud();
+  select("R");
+})();

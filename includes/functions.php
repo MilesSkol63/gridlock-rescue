@@ -9,6 +9,8 @@ if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === basename(__FILE__)) {
     exit;
 }
 
+require_once __DIR__ . '/sliding.php';   // PHP version of the sliding-block rules (validation + replay)
+
 /* ---------------------------------------------------------------- output */
 
 /** Escape text before printing it into HTML (prevents XSS). */
@@ -143,38 +145,63 @@ function db_execute($conn, $sql, $types = '', $params = [])
     return $info;
 }
 
+/**
+ * Whether editing a sliding-block level must be confirmed as a progress reset.
+ * A metadata-only edit never requires clearing progress, and a changed board
+ * with no saved records has nothing to clear.
+ */
+function sliding_layout_edit_requires_progress_confirmation($layout_changed, $progress_count, $confirmed)
+{
+    return (bool) $layout_changed && (int) $progress_count > 0 && !(bool) $confirmed;
+}
+
 /* ------------------------------------------------------------ level helpers */
 // Used by the dashboard now and by the game pages in Deliverable 3.
 
-/** One level row (including the layout text) or null. */
+/** One sliding-block level (including the layout text) or null. Archived Sokoban levels are never returned. */
 function get_level($conn, $level_id)
 {
     return db_select_one(
         $conn,
         'SELECT level_id, title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves
-         FROM levels WHERE level_id = ?',
+         FROM levels WHERE level_id = ? AND game_type = \'sliding\'',
         'i',
         [(int) $level_id]
     );
 }
 
+/** Number of different vehicles in a layout text (the rescue vehicle R included). */
+function sliding_vehicle_count($layout)
+{
+    return count(array_unique(array_filter(str_split(preg_replace('/[^A-Z]/', '', (string) $layout)))));
+}
+
+/** How many playable (sliding-block) levels exist. */
+function count_sliding_levels($conn)
+{
+    return (int) db_select_one($conn, 'SELECT COUNT(*) AS total FROM levels WHERE game_type = \'sliding\'')['total'];
+}
+
 /**
- * All levels in play order with a status for one user:
+ * All sliding-block levels in play order with a status for one user:
  *   'completed' - the user has a progress row for it
  *   'unlocked'  - level 1, or the previous level is completed
  *   'locked'    - anything after the first unfinished level
  * Unlocking is calculated here; nothing about "unlocked" is stored.
+ * Archived Sokoban levels (game_type 'sokoban') and their scores are ignored everywhere.
  */
 function get_levels_with_status($conn, $user_id)
 {
     $levels = db_select_all(
         $conn,
         'SELECT level_id, title, hint, difficulty, grid_width, grid_height, par_moves, layout
-         FROM levels ORDER BY sort_order ASC, level_id ASC'
+         FROM levels WHERE game_type = \'sliding\' ORDER BY sort_order ASC, level_id ASC'
     );
     $done_rows = db_select_all(
         $conn,
-        'SELECT level_id, best_moves FROM user_progress WHERE user_id = ?',
+        'SELECT p.level_id, p.best_moves
+         FROM user_progress p JOIN levels l ON l.level_id = p.level_id
+         WHERE p.user_id = ? AND l.game_type = \'sliding\'',
         'i',
         [(int) $user_id]
     );
@@ -194,8 +221,7 @@ function get_levels_with_status($conn, $user_id)
         } else {
             $status = 'locked';
         }
-        // number of boxes = '$' (box) + '*' (box already on a target) characters in the layout
-        $levels[$index]['box_count'] = substr_count($level['layout'], '$') + substr_count($level['layout'], '*');
+        $levels[$index]['vehicle_count'] = sliding_vehicle_count($level['layout']);
         unset($levels[$index]['layout']);
         $levels[$index]['number'] = $index + 1;
         $levels[$index]['status'] = $status;
@@ -205,7 +231,7 @@ function get_levels_with_status($conn, $user_id)
     return $levels;
 }
 
-/** True when the user may play this level (used by play.php in Deliverable 3). */
+/** True when the user may play this level (used by play.php and save_progress.php). */
 function is_level_unlocked($conn, $user_id, $level_id)
 {
     foreach (get_levels_with_status($conn, $user_id) as $level) {
@@ -216,10 +242,10 @@ function is_level_unlocked($conn, $user_id, $level_id)
     return false;
 }
 
-/** Id of the level that follows $level_id in play order, or null for the last level. */
+/** Id of the sliding-block level that follows $level_id in play order, or null for the last level. */
 function get_next_level_id($conn, $level_id)
 {
-    $rows = db_select_all($conn, 'SELECT level_id FROM levels ORDER BY sort_order ASC, level_id ASC');
+    $rows = db_select_all($conn, 'SELECT level_id FROM levels WHERE game_type = \'sliding\' ORDER BY sort_order ASC, level_id ASC');
     foreach ($rows as $index => $row) {
         if ((int) $row['level_id'] === (int) $level_id) {
             return isset($rows[$index + 1]) ? (int) $rows[$index + 1]['level_id'] : null;
@@ -229,15 +255,35 @@ function get_next_level_id($conn, $level_id)
 }
 
 /**
+ * Deletes a player's saved SLIDING-BLOCK scores (the account and archived Sokoban records are kept).
+ * Returns the number of deleted rows.
+ */
+function delete_sliding_progress($conn, $user_id, $level_id = null)
+{
+    $sql = 'DELETE FROM user_progress WHERE user_id = ?
+            AND level_id IN (SELECT level_id FROM levels WHERE game_type = \'sliding\')';
+    $types = 'i';
+    $params = [(int) $user_id];
+    if ($level_id !== null) {
+        $sql .= ' AND level_id = ?';
+        $types .= 'i';
+        $params[] = (int) $level_id;
+    }
+    $result = db_execute($conn, $sql, $types, $params);
+    return (int) $result['affected'];
+}
+
+/**
  * Leaderboard position of one player: ['rank', 'levels_done', 'total_moves'] or null if no level is completed.
- * Rule (same as the dashboard): more levels first, then fewer total moves; ties share a rank.
+ * Only sliding-block scores count. Rule: more levels first, then fewer total moves; ties share a rank.
  */
 function get_user_rank($conn, $user_id)
 {
     $mine = db_select_one(
         $conn,
-        'SELECT COUNT(*) AS levels_done, COALESCE(SUM(best_moves), 0) AS total_moves
-         FROM user_progress WHERE user_id = ?',
+        'SELECT COUNT(*) AS levels_done, COALESCE(SUM(p.best_moves), 0) AS total_moves
+         FROM user_progress p JOIN levels l ON l.level_id = p.level_id
+         WHERE p.user_id = ? AND l.game_type = \'sliding\'',
         'i',
         [(int) $user_id]
     );
@@ -250,8 +296,10 @@ function get_user_rank($conn, $user_id)
         $conn,
         'SELECT COUNT(*) AS ahead FROM (
              SELECT p.user_id, COUNT(*) AS levels_done, SUM(p.best_moves) AS total_moves
-             FROM user_progress p JOIN users u ON u.user_id = p.user_id
-             WHERE u.role = \'user\' GROUP BY p.user_id
+             FROM user_progress p
+             JOIN users  u ON u.user_id  = p.user_id
+             JOIN levels l ON l.level_id = p.level_id
+             WHERE u.role = \'user\' AND l.game_type = \'sliding\' GROUP BY p.user_id
          ) t
          WHERE t.levels_done > ? OR (t.levels_done = ? AND t.total_moves < ?)',
         'iii',
@@ -287,138 +335,35 @@ function check_account_duplicates($conn, $username, $email, $exclude_user_id = 0
     return $errors;
 }
 
-define('LEVEL_MIN_SIZE', 3);    // smallest allowed width / height
-define('LEVEL_MAX_SIZE', 15);   // largest allowed width / height
-
-/**
- * Validates a level layout typed into the level form.
- * Returns ['errors' => [...], 'layout' => cleaned text, 'width', 'height', 'boxes', 'targets'].
- * The layout is only acceptable when 'errors' is empty. Width, height and box count are
- * calculated here from the text - the browser never supplies them.
- */
-function analyse_level_layout($text)
-{
-    $info = ['errors' => [], 'layout' => '', 'width' => 0, 'height' => 0, 'boxes' => 0, 'targets' => 0];
-
-    $text = str_replace(["\r\n", "\r"], "\n", (string) $text);   // Windows line endings -> \n
-    $lines = explode("\n", $text);
-    foreach ($lines as $i => $line) {
-        $lines[$i] = rtrim($line, " \t");                        // ignore spaces at the end of a row
-    }
-    while (!empty($lines) && $lines[0] === '') {
-        array_shift($lines);                                     // ignore empty rows before the grid
-    }
-    while (!empty($lines) && end($lines) === '') {
-        array_pop($lines);                                       // ...and after it
-    }
-    if (empty($lines)) {
-        $info['errors'][] = 'The layout is empty.';
-        return $info;
-    }
-
-    $height = count($lines);
-    $width = strlen($lines[0]);
-    $allowed = '#-.$*@+';
-    $players = 0;
-    $boxes = 0;
-    $targets = 0;
-    $has_blank_row = false;
-    $uneven = false;
-    $bad_chars = [];
-    $loose_boxes = 0;                                            // boxes that do NOT start on a target
-
-    foreach ($lines as $line) {
-        if ($line === '') {
-            $has_blank_row = true;
-            continue;
-        }
-        if (strlen($line) !== $width) {
-            $uneven = true;
-        }
-        foreach (str_split($line) as $ch) {
-            if (strpos($allowed, $ch) === false) {
-                $bad_chars[$ch] = true;
-                continue;
-            }
-            if ($ch === '@' || $ch === '+') { $players++; }
-            if ($ch === '$' || $ch === '*') { $boxes++; }
-            if ($ch === '$') { $loose_boxes++; }
-            if ($ch === '.' || $ch === '*' || $ch === '+') { $targets++; }
-        }
-    }
-
-    if ($has_blank_row) {
-        $info['errors'][] = 'Remove empty rows from the middle of the layout.';
-    }
-    if (!empty($bad_chars)) {
-        $shown = [];
-        foreach (array_keys($bad_chars) as $ch) {
-            $shown[] = (ctype_print((string) $ch) && $ch !== ' ') ? (string) $ch : '(other character)';
-        }
-        $info['errors'][] = 'Invalid characters: ' . implode(' ', $shown) . '. Allowed: # - . $ * @ +';
-    }
-    if ($uneven) {
-        $info['errors'][] = 'All rows must have the same length.';
-    }
-    if ($width < LEVEL_MIN_SIZE || $height < LEVEL_MIN_SIZE) {
-        $info['errors'][] = 'The grid must be at least ' . LEVEL_MIN_SIZE . 'x' . LEVEL_MIN_SIZE . '.';
-    }
-    if ($width > LEVEL_MAX_SIZE || $height > LEVEL_MAX_SIZE) {
-        $info['errors'][] = 'The grid can be at most ' . LEVEL_MAX_SIZE . 'x' . LEVEL_MAX_SIZE . '.';
-    }
-    if ($players !== 1) {
-        $info['errors'][] = 'The layout needs exactly one player (@ or +). Found ' . $players . '.';
-    }
-    if ($boxes < 1) {
-        $info['errors'][] = 'The layout needs at least one box ($ or *).';
-    }
-    if ($boxes !== $targets) {
-        $info['errors'][] = 'Boxes and targets must match: found ' . $boxes . ' boxes and ' . $targets . ' targets.';
-    }
-    if ($boxes >= 1 && $boxes === $targets && $loose_boxes === 0) {
-        $info['errors'][] = 'Every box already starts on a target, so the level is already solved.';
-    }
-
-    $info['layout'] = implode("\n", $lines);
-    $info['width'] = $width;
-    $info['height'] = $height;
-    $info['boxes'] = $boxes;
-    $info['targets'] = $targets;
-    return $info;
-}
-
 /* --------------------------------------------------------------- UI helpers */
 
 /** Bootstrap-friendly CSS class for a difficulty badge. */
 function difficulty_class($difficulty)
 {
-    $map = ['easy' => 'badge-easy', 'medium' => 'badge-medium', 'hard' => 'badge-hard'];
+    $map = ['easy' => 'badge-easy', 'medium' => 'badge-medium', 'hard' => 'badge-hard', 'expert' => 'badge-expert'];
     return $map[$difficulty] ?? 'badge-easy';
 }
 
 /**
- * Prints a small read-only picture of a level layout (used on the login page).
- * Characters: # wall, - floor, . target, $ box, * box on target, @ player, + player on target.
- * The CSS classes (.cell .wall .floor .target .box .player) are the same ones the game board will use.
+ * Prints a small decorative traffic-jam picture (login page brand panel). Pure CSS, no scripts.
+ * Vehicles are placed on a 6 x 3 grid with grid-column / grid-row.
  */
-function render_board_preview($rows, $cell_size = 36)
+function render_traffic_preview()
 {
-    $cols = strlen($rows[0]);
-    echo '<div class="board" style="--cols:' . (int) $cols . ';--cell:' . (int) $cell_size . 'px" aria-hidden="true">' . "\n";
-    foreach ($rows as $row) {
-        foreach (str_split($row) as $ch) {
-            $classes = ($ch === '#') ? 'cell wall' : 'cell floor';
-            if (strpos('.*+', $ch) !== false) {
-                $classes .= ' target';
-            }
-            if (strpos('$*', $ch) !== false) {
-                $classes .= ' box';
-            }
-            if (strpos('@+', $ch) !== false) {
-                $classes .= ' player';
-            }
-            echo '    <div class="' . $classes . '"></div>' . "\n";
-        }
+    $vehicles = [
+        // [css class, column start, column span, row start, row span]
+        ['rescue h', 1, 2, 2, 1],
+        ['car-a v', 4, 1, 1, 3],
+        ['car-b h', 5, 2, 1, 1],
+        ['car-c v', 3, 1, 1, 2],
+        ['car-d h', 1, 2, 3, 1],
+        ['car-e h', 5, 2, 3, 1],
+    ];
+    echo '<div class="sl-mini" aria-hidden="true">' . "\n";
+    foreach ($vehicles as $v) {
+        echo '    <span class="sl-mini-vehicle ' . $v[0] . '" style="grid-column:' . $v[1] . ' / span ' . $v[2]
+            . ';grid-row:' . $v[3] . ' / span ' . $v[4] . '"></span>' . "\n";
     }
+    echo '    <span class="sl-mini-exit">EXIT &#10148;</span>' . "\n";
     echo '</div>' . "\n";
 }

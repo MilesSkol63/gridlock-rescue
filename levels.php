@@ -24,13 +24,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         try {
             mysqli_begin_transaction($conn);
-            $target = db_select_one($conn, 'SELECT level_id, title FROM levels WHERE level_id = ? FOR UPDATE', 'i', [$level_id]);
+            $target = db_select_one($conn, 'SELECT level_id, title FROM levels WHERE level_id = ? AND game_type = \'sliding\' FOR UPDATE', 'i', [$level_id]);
             if ($target === null) {
                 mysqli_rollback($conn);
                 set_flash('warning', 'That level no longer exists.');
             } else {
                 $count = db_select_one($conn, 'SELECT COUNT(*) AS total FROM user_progress WHERE level_id = ?', 'i', [$level_id]);
-                db_execute($conn, 'DELETE FROM levels WHERE level_id = ?', 'i', [$level_id]);
+                db_execute($conn, 'DELETE FROM levels WHERE level_id = ? AND game_type = \'sliding\'', 'i', [$level_id]);
                 mysqli_commit($conn);
                 set_flash('success', 'Level "' . $target['title'] . '" and ' . (int) $count['total'] . ' saved score(s) were deleted.');
             }
@@ -53,6 +53,10 @@ if ($is_admin) {
     foreach (db_select_all($conn, 'SELECT level_id, COUNT(*) AS total FROM user_progress GROUP BY level_id') as $row) {
         $score_counts[(int) $row['level_id']] = (int) $row['total'];
     }
+}
+$legacy_levels = 0;
+if ($is_admin) {
+    $legacy_levels = (int) db_select_one($conn, 'SELECT COUNT(*) AS total FROM levels WHERE game_type = \'sokoban\'')['total'];
 }
 $active_page = 'levels';
 ?>
@@ -85,6 +89,9 @@ $active_page = 'levels';
 
 <?php if ($is_admin): ?>
         <p class="text-muted">Test Play opens any level without saving progress. Deleting a level also deletes the saved scores of every player for that level.</p>
+    <?php if ($legacy_levels > 0): ?>
+        <p class="text-muted small">Archive: <?php echo $legacy_levels; ?> old Sokoban level(s) and their scores are kept in the database but are no longer shown, played or ranked.</p>
+    <?php endif; ?>
 <?php endif; ?>
 
 <?php if (empty($levels)): ?>
@@ -108,7 +115,7 @@ $active_page = 'levels';
                     <h2 class="level-name"><?php echo e($level['title']); ?></h2>
                     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                         <span class="badge <?php echo e(difficulty_class($level['difficulty'])); ?>"><?php echo e(ucfirst($level['difficulty'])); ?></span>
-                        <span class="text-muted small"><?php echo (int) $level['grid_width']; ?>x<?php echo (int) $level['grid_height']; ?>, <?php echo (int) $level['box_count']; ?> box<?php echo ((int) $level['box_count'] === 1) ? '' : 'es'; ?></span>
+                        <span class="text-muted small"><?php echo (int) $level['vehicle_count']; ?> vehicles</span>
                     </div>
                     <p class="level-note">
         <?php if ($is_admin): ?>

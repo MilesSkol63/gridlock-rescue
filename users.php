@@ -107,7 +107,8 @@ if ($q !== '') {
     $users = db_select_all(
         $conn,
         'SELECT u.user_id, u.username, u.email, u.role, u.created_at,
-                (SELECT COUNT(*) FROM user_progress p WHERE p.user_id = u.user_id) AS levels_done
+                (SELECT COUNT(*) FROM user_progress p JOIN levels lv ON lv.level_id = p.level_id
+                 WHERE p.user_id = u.user_id AND lv.game_type = \'sliding\') AS levels_done
          FROM users u WHERE u.username LIKE ? OR u.email LIKE ?
          ORDER BY u.user_id ASC LIMIT 200',
         'ss',
@@ -117,11 +118,12 @@ if ($q !== '') {
     $users = db_select_all(
         $conn,
         'SELECT u.user_id, u.username, u.email, u.role, u.created_at,
-                (SELECT COUNT(*) FROM user_progress p WHERE p.user_id = u.user_id) AS levels_done
+                (SELECT COUNT(*) FROM user_progress p JOIN levels lv ON lv.level_id = p.level_id
+                 WHERE p.user_id = u.user_id AND lv.game_type = \'sliding\') AS levels_done
          FROM users u ORDER BY u.user_id ASC LIMIT 200'
     );
 }
-$total_levels = (int) db_select_one($conn, 'SELECT COUNT(*) AS total FROM levels')['total'];
+$total_levels = count_sliding_levels($conn);
 
 $active_page = 'users';
 ?>

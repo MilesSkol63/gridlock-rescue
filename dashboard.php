@@ -16,8 +16,9 @@ if ($is_admin) {
     $stats = db_select_one(
         $conn,
         'SELECT (SELECT COUNT(*) FROM users)         AS total_users,
-                (SELECT COUNT(*) FROM levels)        AS total_levels,
-                (SELECT COUNT(*) FROM user_progress) AS total_records'
+                (SELECT COUNT(*) FROM levels WHERE game_type = \'sliding\') AS total_levels,
+                (SELECT COUNT(*) FROM user_progress pr JOIN levels lv ON lv.level_id = pr.level_id
+                 WHERE lv.game_type = \'sliding\') AS total_records'
     );
     $recent_completions = db_select_all(
         $conn,
@@ -25,6 +26,7 @@ if ($is_admin) {
          FROM user_progress p
          JOIN users  u ON u.user_id  = p.user_id
          JOIN levels l ON l.level_id = p.level_id
+         WHERE l.game_type = \'sliding\'
          ORDER BY p.completed_at DESC, p.progress_id DESC
          LIMIT 5'
     );
@@ -50,37 +52,16 @@ if ($is_admin) {
     }
     $percent = ($total_levels > 0) ? (int) round($completed / $total_levels * 100) : 0;
 
-    $totals = db_select_one(
-        $conn,
-        'SELECT COUNT(*) AS levels_done, COALESCE(SUM(best_moves), 0) AS total_moves
-         FROM user_progress WHERE user_id = ?',
-        'i',
-        [$user_id]
-    );
-    $total_moves = (int) $totals['total_moves'];
-
-    // Rank = 1 + number of players ahead (more levels, or same levels with fewer total moves).
-    $rank = null;
-    if ((int) $totals['levels_done'] > 0) {
-        $ahead = db_select_one(
-            $conn,
-            'SELECT COUNT(*) AS ahead FROM (
-                 SELECT p.user_id, COUNT(*) AS levels_done, SUM(p.best_moves) AS total_moves
-                 FROM user_progress p JOIN users u ON u.user_id = p.user_id
-                 WHERE u.role = \'user\' GROUP BY p.user_id
-             ) t
-             WHERE t.levels_done > ? OR (t.levels_done = ? AND t.total_moves < ?)',
-            'iii',
-            [(int) $totals['levels_done'], (int) $totals['levels_done'], $total_moves]
-        );
-        $rank = (int) $ahead['ahead'] + 1;
-    }
+    // Sliding-block scores only (archived Sokoban records are ignored). Same ranking rule as the leaderboard.
+    $rank_info = get_user_rank($conn, $user_id);
+    $total_moves = ($rank_info !== null) ? $rank_info['total_moves'] : 0;
+    $rank = ($rank_info !== null) ? $rank_info['rank'] : null;
 
     $recent_scores = db_select_all(
         $conn,
         'SELECT l.title, l.difficulty, p.best_moves, p.completed_at
          FROM user_progress p JOIN levels l ON l.level_id = p.level_id
-         WHERE p.user_id = ?
+         WHERE p.user_id = ? AND l.game_type = \'sliding\'
          ORDER BY p.updated_at DESC, p.progress_id DESC
          LIMIT 5',
         'i',

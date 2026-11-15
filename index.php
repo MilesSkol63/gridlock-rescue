@@ -76,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="row g-4 align-items-stretch justify-content-center">
             <div class="col-lg-6 d-none d-lg-flex">
                 <section class="brand-panel" id="brand-panel">
-                    <?php render_board_preview(['#######', '#@$.--#', '#######'], 36); ?>
+                    <?php render_traffic_preview(); ?>
                     <h1 class="brand-title">GRIDLOCK RESCUE</h1>
                     <p class="brand-tagline">Push the boxes. Free the grid.</p>
                     <ul class="brand-list">

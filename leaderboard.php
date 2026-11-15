@@ -12,7 +12,7 @@ $account  = require_login();
 $is_admin = ($account['role'] === 'admin');
 $my_id    = (int) $account['user_id'];
 
-$level_choices = db_select_all($conn, 'SELECT level_id, title FROM levels ORDER BY sort_order ASC, level_id ASC');
+$level_choices = db_select_all($conn, 'SELECT level_id, title FROM levels WHERE game_type = \'sliding\' ORDER BY sort_order ASC, level_id ASC');
 
 // Which view? ?level=<id> must be one of the existing levels, otherwise show "Overall".
 $selected_level = null;
@@ -29,8 +29,10 @@ if ($selected_level === null) {
     $rows = db_select_all(
         $conn,
         'SELECT u.user_id, u.username, COUNT(p.level_id) AS levels_completed, SUM(p.best_moves) AS total_moves
-         FROM users u JOIN user_progress p ON p.user_id = u.user_id
-         WHERE u.role = \'user\'
+         FROM users u
+         JOIN user_progress p ON p.user_id = u.user_id
+         JOIN levels l ON l.level_id = p.level_id
+         WHERE u.role = \'user\' AND l.game_type = \'sliding\'
          GROUP BY u.user_id, u.username
          ORDER BY levels_completed DESC, total_moves ASC, u.username ASC
          LIMIT 20'

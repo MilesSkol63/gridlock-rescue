@@ -36,15 +36,19 @@ if (!$is_admin && $levels[$index]['status'] === 'locked') {
     redirect('levels.php');
 }
 
-$level = get_level($conn, $level_id);        // includes the layout text
+$level = get_level($conn, $level_id);        // the stored layout: 6 rows of 6 characters
+$canonical_rows = sliding_rows_from_text($level['layout']);
+$layout_hash = sliding_layout_fingerprint($level['layout']);
 $next_level_id = isset($levels[$index + 1]) ? (int) $levels[$index + 1]['level_id'] : null;
 $best_moves = $is_admin ? null : $levels[$index]['best_moves'];
 
-// Everything the JavaScript engine needs. The user id and role are deliberately NOT included.
+// Everything the JavaScript game needs. The user id and role are deliberately NOT included.
 $level_data = [
     'levelId'     => (int) $level['level_id'],
     'title'       => $level['title'],
-    'layout'      => $level['layout'],
+    'rows'        => $canonical_rows,
+    'layoutHash'  => $layout_hash,
+    'par'         => (int) $level['par_moves'],
     'canSave'     => !$is_admin,
     'bestMoves'   => $best_moves,
     'nextLevelId' => $next_level_id,
@@ -84,67 +88,49 @@ $active_page = 'levels';
         <div class="alert alert-info" role="status" id="admin-preview-banner">Admin preview &ndash; progress is not saved.</div>
 <?php endif; ?>
 
-        <div class="row g-4">
-            <div class="col-lg-8">
-                <section class="gr-card board-card" aria-label="Game board">
-                    <div class="board-wrap" id="board-wrap">
-                        <div class="board board-game" id="game-board" role="img" aria-label="Puzzle board"></div>
+        <div class="sl-wrap">
+            <section class="sl-hud" aria-label="Status">
+                <div class="stat-card"><div class="stat-label">MOVES</div><div class="stat-value sl-moves" id="move-count">0</div></div>
+                <div class="stat-card"><div class="stat-label">PAR (OPTIMAL)</div><div class="stat-value" id="best-known"><?php echo (int) $level['par_moves']; ?></div></div>
+                <div class="stat-card"><div class="stat-label">YOUR BEST</div><div class="stat-value" id="your-best">&mdash;</div></div>
+            </section>
 
-                        <div class="win-overlay d-none" id="win-overlay" role="dialog" aria-live="polite" aria-labelledby="win-title">
-                            <div class="win-box">
-                                <h2 id="win-title">LEVEL COMPLETE!</h2>
-                                <p class="win-line">Moves: <strong id="win-moves">0</strong>
-                                    <span class="badge badge-new-best d-none" id="win-new-best">NEW BEST!</span></p>
-                                <p class="win-status" id="win-status"></p>
-                                <div class="d-flex flex-wrap justify-content-center gap-2">
-                                    <button type="button" class="btn btn-primary d-none" id="btn-next">Next Level</button>
-                                    <button type="button" class="btn btn-warning d-none" id="btn-retry">Retry Save</button>
-                                    <button type="button" class="btn btn-outline-light" id="btn-replay">Replay</button>
-                                    <a class="btn btn-outline-light" href="levels.php" id="btn-levels">Level List</a>
-                                </div>
-                            </div>
+            <section class="sl-board-area" id="board-area" aria-label="Game board">
+                <div class="sl-frame">
+                    <div class="sl-board" id="game-board" role="application" aria-label="Rescue puzzle board"></div>
+                    <div class="sl-exit" aria-hidden="true"><span class="sl-exit-arrow">&#10148;</span><span class="sl-exit-text">EXIT</span></div>
+                    <div class="sl-exit-gap" aria-hidden="true"></div>
+                </div>
+
+                <div class="sl-overlay d-none" id="win-overlay" role="dialog" aria-live="polite" aria-labelledby="win-title">
+                    <div class="sl-win-box">
+                        <div class="sl-siren" aria-hidden="true"></div>
+                        <h2 id="win-title">RESCUE COMPLETE!</h2>
+                        <p class="sl-win-moves"><strong id="win-moves">0</strong> moves
+                            <span class="badge badge-new-best d-none" id="win-new-best">NEW BEST!</span></p>
+                        <p class="sl-win-rating" id="win-rating"></p>
+                        <p class="sl-win-status" id="win-status"></p>
+                        <div class="d-flex flex-wrap justify-content-center gap-2">
+                            <button type="button" class="btn btn-primary d-none" id="btn-next">Next Level</button>
+                            <button type="button" class="btn btn-warning d-none" id="btn-retry">Retry Save</button>
+                            <button type="button" class="btn btn-outline-light" id="btn-replay">Replay</button>
+                            <a class="btn btn-outline-light" href="levels.php" id="btn-levels">Level List</a>
                         </div>
                     </div>
+                </div>
+            </section>
 
-                    <ul class="board-legend list-unstyled" aria-label="Legend">
-                        <li><span class="legend-swatch cell wall"></span> wall</li>
-                        <li><span class="legend-swatch cell floor"></span> floor</li>
-                        <li><span class="legend-swatch cell floor target"></span> target</li>
-                        <li><span class="legend-swatch cell floor box"></span> box</li>
-                        <li><span class="legend-swatch cell floor box target"></span> box on target</li>
-                        <li><span class="legend-swatch cell floor player"></span> player</li>
-                    </ul>
-                </section>
+            <div class="sl-controls">
+                <button type="button" class="btn btn-outline-navy" id="btn-undo" disabled>&#8630; Undo <kbd>Z</kbd></button>
+                <button type="button" class="btn btn-outline-navy" id="btn-restart">&#8635; Restart <kbd>R</kbd></button>
             </div>
 
-            <div class="col-lg-4">
-                <aside class="gr-card" id="game-sidebar">
-                    <div class="stat-label">MOVES</div>
-                    <div class="move-count" id="move-count">0</div>
-                    <p class="mb-3">Best: <strong id="best-moves">&mdash;</strong></p>
-
-                    <div class="d-grid gap-2 mb-3">
-                        <button type="button" class="btn btn-outline-navy" id="btn-undo" disabled>Undo (Z)</button>
-                        <button type="button" class="btn btn-outline-navy" id="btn-restart">Restart (R)</button>
-                    </div>
-
-                    <div class="stat-label">HOW TO PLAY</div>
-                    <p class="small mb-3">Move with the arrow keys or WASD. Push every box onto a target. Boxes can be pushed but never pulled.</p>
 <?php if (!empty($level['hint'])): ?>
-                    <div class="stat-label">HINT</div>
-                    <p class="small mb-3"><?php echo e($level['hint']); ?></p>
+            <p class="sl-hint"><?php echo e($level['hint']); ?></p>
 <?php endif; ?>
-
-                    <div class="dpad-container">
-                        <div class="dpad d-lg-none" aria-label="On-screen controls">
-                            <button type="button" class="btn btn-outline-navy dpad-btn dpad-up" data-dir="up" aria-label="Move up">&uarr;</button>
-                            <button type="button" class="btn btn-outline-navy dpad-btn dpad-left" data-dir="left" aria-label="Move left">&larr;</button>
-                            <button type="button" class="btn btn-outline-navy dpad-btn dpad-down" data-dir="down" aria-label="Move down">&darr;</button>
-                            <button type="button" class="btn btn-outline-navy dpad-btn dpad-right" data-dir="right" aria-label="Move right">&rarr;</button>
-                        </div>
-                    </div>
-                </aside>
-            </div>
+            <p class="sl-help sl-help-touch">Drag a vehicle along its lane. A slide of any length is one move. Get the red rescue vehicle out through the exit.</p>
+            <p class="sl-help sl-help-keys">Drag a vehicle, or select it (click or <kbd>Tab</kbd>) and use the arrow keys; hold <kbd>Shift</kbd> to slide all the way.
+                <kbd>Z</kbd> undo, <kbd>R</kbd> restart. A slide of any length is one move.</p>
         </div>
 
         <script type="application/json" id="level-data"><?php
@@ -154,6 +140,7 @@ $active_page = 'levels';
 
     <footer class="site-footer">Gridlock Rescue - Endterm Project</footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/sliding-engine.js"></script>
     <script src="assets/js/game.js"></script>
 </body>
 </html>

@@ -78,8 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($is_admin) {
             set_flash('danger', 'Administrators have no progress to reset.');
         } else {
-            $result = db_execute($conn, 'DELETE FROM user_progress WHERE user_id = ?', 'i', [$my_id]);
-            set_flash('success', 'Your progress was reset (' . (int) $result['affected'] . ' record(s) removed).');
+            $removed = delete_sliding_progress($conn, $my_id);
+            set_flash('success', 'Your progress was reset (' . $removed . ' record(s) removed).');
         }
         redirect('profile.php');
     } else {
@@ -90,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 if (!$is_admin) {
     $rank = get_user_rank($conn, $my_id);
-    $total_levels = (int) db_select_one($conn, 'SELECT COUNT(*) AS total FROM levels')['total'];
+    $total_levels = count_sliding_levels($conn);
 }
 $active_page = 'profile';
 ?>

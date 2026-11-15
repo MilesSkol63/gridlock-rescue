@@ -1,8 +1,170 @@
 # Gridlock Rescue - Project Documentation (Deliverables 1-4)
 
-Complete college endterm project: PHP / MySQL (MySQLi) / Bootstrap 5 puzzle game with player and administrator roles. Local XAMPP testing is complete for Deliverables 2, 3 and 4 (team-executed). **Railway deployment is still PENDING** - it has not been deployed or verified.
+Complete college endterm project: PHP / MySQL (MySQLi) / Bootstrap 5 sliding-block traffic puzzle with player and administrator roles. The Sokoban version passed the team's local XAMPP tests (Deliverables 2-4, team-executed). **The sliding-block integration (this version) has not yet been run on XAMPP or Railway** - see section H for what was and was not tested.
 
 Requirements: PHP 8.2+ with the `mysqli` extension, MySQL 8 or MariaDB 10.4+, Apache (XAMPP) locally or Railway in production.
+
+# CURRENT VERSION: sliding-block traffic puzzle (replaces the Sokoban game)
+
+> **Reading guide.** This section describes the current application. The sections _after_ it (Deliverables 2-4) are the
+> original documentation and test records of the **Sokoban version**; they are kept as history. Where they disagree with this
+> section (the game, the level format, the level editor, the scoring), this section wins. Authentication, sessions, roles,
+> user management, profile, progress management, dashboards and the leaderboard logic were kept (see the checklist below).
+
+## A. What changed
+
+The box-pushing game was replaced by the approved sliding-block traffic rescue game (6x6 board, vehicles of length 2-3 with a fixed
+orientation, red rescue vehicle, one slide of any length = one move). Everything else is the same application.
+| Area | Result |
+|---|---|
+| Game | `assets/js/sliding-engine.js` (rules, same code as the prototype + `getHistory()`), `assets/js/game.js` (screen + input), `play.php` (page) |
+| Server rules | `includes/sliding.php`: PHP version of the rules, level validation, solver, and replay of submitted games |
+| Saving a score | `save_progress.php` receives the **list of accepted slides**, replays it on the server and counts the moves itself |
+| Admin level editor | `level_form.php` + `assets/js/level-editor.js`: visual 6x6 editor (add / select / move / rotate / resize / delete vehicles, rescue vehicle fixed to row 3), live solvability check, server-side validation with the PHP solver |
+| Levels | six bundled levels in the database (5, 10, 12, 14, 17, 20 optimal moves); levels are read from MySQL, none are hard-coded in the game |
+| Old data | Sokoban levels and scores are **archived, not deleted** (see C) |
+
+## B. Level format (one format for the editor, the browser game and PHP)
+
+6 rows of 6 characters stored in `levels.layout`: `.` empty cell, `R` the rescue vehicle, any other capital letter = one vehicle.
+Orientation and length are read from the shape (2 or 3 cells in a straight line). The rescue vehicle must be horizontal in row 3 and leaves
+through the exit on the right edge of that row. Example (level 1):
+
+```
+D..A..
+D..A.C
+.RRA.C
+..EEE.
+..BB..
+......
+```
+
+Columns used in `levels`: `game_type` ('sliding'), `title`, `hint` (description), `difficulty` (easy/medium/hard/expert), `sort_order`,
+`grid_width`/`grid_height` (always 6), `layout`, `par_moves` (= optimal moves, calculated by the server; an admin may set a higher par but never a lower one).
+
+## C. Database migration (non-destructive)
+
+`database/migrate_sliding.sql` (also contained in the updated `database/gridlock_rescue.sql`, which is safe on new AND existing databases):
+adds `levels.game_type` only if missing (all existing levels become `'sokoban'` = archived), adds the difficulty value `expert`, adds an index, and inserts the
+six sliding-block levels once. It does **not** change or delete `users`, `user_progress`, passwords or sessions. Archived Sokoban levels/scores stay in the
+tables but are filtered out of every game list, unlocking rule, dashboard statistic, leaderboard, progress page and reset action.
+**Before migrating, make a backup of the database** (any method your host offers).
+
+**Local XAMPP (existing database):** phpMyAdmin -> select your `gridlock_rescue` database -> Import -> `database/migrate_sliding.sql` -> Go.
+Or from a terminal in the project folder: `C:\xampp\php\php.exe database\import.php migrate_sliding.sql`. Then copy the new files over the old project.
+**Local XAMPP (new database):** create the database, then import `database/gridlock_rescue.sql` as before.
+**Railway (existing database):** deploy the new code, then run once from inside the app container (private network, nothing exposed):
+`railway ssh -- php database/import.php migrate_sliding.sql`. It prints how many sliding levels exist and how many Sokoban levels were kept.
+Order matters only a little: until the migration runs, pages that read `levels.game_type` will show a database error, so run it right after the deploy (or before, because the old code ignores the new column).
+Re-running the migration is harmless. **Rollback:** restore the backup (the old code only needs the old data, the new column is ignored by it).
+
+## D. How the admin creates a level
+
+Levels -> **+ New Level** (or **Edit**). Choose orientation and length, click an empty square to add a vehicle, click a vehicle to select it (move with the
+arrow buttons or arrow keys, rotate, length 2/3, delete). The red R stays in row 3. The page shows "Solvable. Optimal solution: N moves" (browser check) and fills
+_Par moves_ when empty. On **Save Level** the server parses the board, checks geometry (6x6, valid vehicles, no overlaps because each cell holds one letter, rescue vehicle rules),
+solves it with the PHP solver and rejects unsolvable levels; par below the optimum is rejected. If the board arrangement changes and progress exists, saving is blocked until the administrator explicitly confirms clearing those scores. Metadata-only edits preserve progress. The board update and targeted score deletion happen in one transaction.
+Test Play (admin) plays any level without saving. Deleting a level (confirmation dialog) also deletes its scores (existing cascade). Archived Sokoban levels cannot be edited or deleted from the site.
+
+## E. How a score is saved and checked
+
+The browser sends `{level_id, layout_hash, moves: [[vehicle, newPosition], ...]}` (the accepted slides, with undo and restart already applied) plus the CSRF token in a header. `layout_hash` is a SHA-256 fingerprint of the normalized board shown to the player.
+`save_progress.php`: session user only, role must be player, level must exist and be unlocked, and the submitted layout fingerprint must still match the database. A stale game opened before an administrator changed the board is rejected with HTTP 409; the game page offers a **Reload Level** action instead of retrying the stale move list. The endpoint then **replays every slide with the PHP rules**; the game must end with the rescue vehicle completely off the board. The stored score is the number of slides counted by the server (never a number from the browser). The endpoint locks the level row and saves the score in a transaction, serializing score submission against admin board edits. A forged or impossible move list is rejected with HTTP 422 and nothing is stored.
+
+## F. Files added / modified / removed
+
+| Status    | File                                                                                                                                                                                                               | What                                                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| NEW       | `includes/sliding.php`                                                                                                                                                                                             | PHP rules, validator, BFS solver, replay, normalized layout fingerprint                                                                      |
+| NEW       | `assets/js/sliding-engine.js`                                                                                                                                                                                      | browser engine (from the approved prototype)                                                                                                 |
+| NEW       | `assets/js/level-editor.js`                                                                                                                                                                                        | visual level editor                                                                                                                          |
+| NEW       | `database/migrate_sliding.sql`                                                                                                                                                                                     | non-destructive migration + six levels                                                                                                       |
+| NEW       | `tests/*.test.js`, `tests/run_all.js`, `tests/fixtures/*`, `tests/php/sliding_test.php`, `tests/php/level_edit_policy_test.php`                                                                                    | automated tests                                                                                                                              |
+| REPLACED  | `assets/js/game.js`                                                                                                                                                                                                | was the Sokoban engine; now the sliding-block screen/input code                                                                              |
+| REPLACED  | `play.php`, `save_progress.php`, `level_form.php`                                                                                                                                                                  | sliding-block page, score replay, visual editor                                                                                              |
+| MODIFIED  | `includes/functions.php`                                                                                                                                                                                           | level helpers read only `game_type='sliding'`; Sokoban validator removed; `delete_sliding_progress()`; tested level-edit confirmation policy |
+| MODIFIED  | `levels.php`, `leaderboard.php`, `dashboard.php`, `progress.php`, `profile.php`, `users.php`                                                                                                                       | queries limited to sliding-block levels/scores; wording "vehicles"; archive note for admins; resets only touch sliding scores                |
+| MODIFIED  | `index.php`                                                                                                                                                                                                        | login page picture (traffic jam instead of the Sokoban board)                                                                                |
+| MODIFIED  | `assets/css/style.css`, `assets/js/app.js`, `database/gridlock_rescue.sql`, `database/import.php`, `docs/README.md`                                                                                                | styles; Sokoban preview code removed from app.js; new schema; `import.php` can run the migration file                                        |
+| REMOVED   | old Sokoban tests (`tests/engine.test.js` content), Sokoban board CSS, on-screen D-pad (not needed: vehicles are dragged or moved with the keyboard)                                                               |                                                                                                                                              |
+| UNCHANGED | `register.php`, `logout.php`, `user_edit.php`, `setup_admin.php`, `includes/auth.php`, `includes/db.php`, `includes/config.php`, `includes/navbar.php`, `includes/confirm_modal.php`, `composer.json`, `.htaccess` | authentication, sessions, roles, CRUD of users, navigation                                                                                   |
+
+`includes/config.local.php` (your local credentials) is **not** in the ZIP; copy `includes/config.local.example.php` as before. Environment variables on Railway are unchanged.
+
+## G. Feature-preservation checklist
+
+Status meanings: **Code kept** = the code path was not changed (verified by comparing files); **Adapted** = changed only to use sliding-block levels. PHP syntax and database-independent PHP logic tests have now been executed; a real MySQL/MariaDB-backed website test and browser/device test are still outstanding (see section H).
+| Feature | How it is preserved | Status |
+|---|---|---|
+| Registration, login, logout, sessions, CSRF | `register.php`, `index.php` (login code), `logout.php`, `includes/auth.php` unchanged | Code kept |
+| Roles and access control | `require_login/require_admin/require_user` unchanged; every changing action still POST + CSRF | Code kept |
+| Admin / player dashboards | same page, queries limited to sliding levels | Adapted |
+| User management (add, edit, delete, search) | `users.php`, `user_edit.php`; level counts use sliding levels | Code kept / Adapted |
+| Profile, password change, reset own progress | `profile.php`; reset only deletes sliding scores | Adapted |
+| Progress page, reset one level / all, admin delete | `progress.php` adapted the same way | Adapted |
+| Level list, unlocking, "Continue/Start Playing" | `get_levels_with_status()` (same rule) on sliding levels | Adapted |
+| Leaderboard (more levels first, then fewer total moves, ties share a rank) | same SQL with `game_type='sliding'` | Adapted |
+| Admin level CRUD, order, difficulty, par, description, delete with confirmation, Test Play | `levels.php` + new `level_form.php`; changed boards with saved progress require confirmation and clear only that level's scores transactionally | Adapted |
+| Level activation/publishing | the existing app had no such feature, so none was added | n/a |
+| Archived Sokoban data | kept in the database, hidden from the game | Preserved |
+| MySQLi prepared statements, Railway env variables, no secrets in the ZIP | unchanged conventions | Code kept |
+
+## H. Test report
+
+**Executed in the available container (Node + PHP CLI):** `node tests/run_all.js`, `php tests/php/sliding_test.php`, and `php tests/php/level_edit_policy_test.php`
+| Suite | Result |
+|---|---|
+| `tests/engine.test.js` - rules, collisions, bounds, exit/victory, move counting, undo/restart, history, all six levels replayed, optimal length by two solvers, difficulty curve, 36,000 random actions | **129 passed, 0 failed** |
+| `tests/editor.test.js` - editor model: add/move/rotate/resize/delete, rescue-vehicle rules, round trip of all six levels, unsolvable board detected | **35 passed, 0 failed** |
+| `tests/sql_seed.test.js` - both SQL files insert exactly the tested levels, are guarded and non-destructive | **40 passed, 0 failed** |
+| `tests/ui-smoke.test.js` - the real `game.js` on a fake page: keyboard, drag, undo/restart, save request format including the board fingerprint, stale-board reload flow, retry, failures, admin preview, all six levels played through the UI, board sizes for 320-1280px | **47 passed, 0 failed** |
+| `tests/php/sliding_test.php` - PHP parser, solver, layout validation and move replay | **116 passed, 0 failed** |
+| `tests/php/level_edit_policy_test.php` - metadata-only edits, changed layouts with/without progress, confirmation required/accepted | **5 passed, 0 failed** |
+Sabotage check: four deliberate engine breakages (no collision check, early victory, no move merging, empty history) were each caught by the engine tests (22, 3, 3 and 5 failed checks); three of them were also caught by the UI test.
+**Executed here (algorithm cross-check):** a line-by-line Python transliteration of `includes/sliding.php` (parser, range, replay, solver, analysis) reproduced all 107 expected results: all six optimal move counts, 54 rejected tampered move lists and 11 invalid/unsolvable layouts. This checks the PHP _logic_; it is **not** a PHP run.
+**Executed here (PHP CLI):** `php tests/php/sliding_test.php` (**116 passed**), `php tests/php/level_edit_policy_test.php` (**5 passed**), and `php -l` on all **25 PHP files** (no syntax errors). Node test runner completed all **251 JavaScript checks**.
+**NOT RUN:**
+
+- Real MySQLi database queries, row-locking/transaction behavior, and the migration against a real MySQL/MariaDB database (the available PHP CLI does not have the `mysqli` extension and no MySQL/MariaDB server is installed here).
+- XAMPP website behavior, real browser rendering, phone touch interactions, and Railway deployment. These still need testing on your XAMPP installation.
+- Login/registration/sessions/roles/CRUD regression runs. Their test records further down in this file belong to the Sokoban version.
+
+### Checklist for the team (local XAMPP, then Railway) - nothing below has been executed yet
+
+| #   | Test                                                                                                                                                                   | Expected Result                                                                                                                                                 | Actual Result | Status          |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | --------------- |
+| 1   | `php -l` on every PHP file; `php tests/php/sliding_test.php`; `php tests/php/level_edit_policy_test.php`                                                               | no syntax errors; 116 + 5 PHP checks passed in the available container; repeat under XAMPP                                                                      |               | Repeat on XAMPP |
+| 2   | Copy the database, run `migrate_sliding.sql`, run it again                                                                                                             | levels table has `game_type`; 6 sliding levels; users and `user_progress` row counts unchanged; second run changes nothing                                      |               | Not run         |
+| 3   | Fresh database + `gridlock_rescue.sql`                                                                                                                                 | tables created, 6 levels                                                                                                                                        |               | Not run         |
+| 4   | Log in as a player with old Sokoban scores                                                                                                                             | Levels page shows only the 6 new levels; Level 1 unlocked, others locked; dashboard/leaderboard ignore old scores                                               |               | Not run         |
+| 5   | Play level 1: drag, arrow keys, Shift+arrow, Undo (Z), Restart (R)                                                                                                     | vehicles slide, blocked vehicles shake, counter correct                                                                                                         |               | Not run         |
+| 6   | Finish level 1                                                                                                                                                         | rescue vehicle drives out, overlay with rating, "Progress saved", Next Level works; one row in `user_progress`                                                  |               | Not run         |
+| 7   | Finish it again with more / fewer moves                                                                                                                                | best only improves; still one row                                                                                                                               |               | Not run         |
+| 8   | Finish levels in order                                                                                                                                                 | each completion unlocks the next; leaderboard ranks by levels then total moves                                                                                  |               | Not run         |
+| 9   | Dev tools: send `save_progress.php` a wrong move list, stale `layout_hash`, locked level, no / wrong CSRF header, an admin session, a `moves` number instead of a list | all rejected (400/403/409/422), nothing stored                                                                                                                  |               | Not run         |
+| 10  | Admin: Levels list, Test Play, finish a level in preview                                                                                                               | "nothing was saved"; no `user_progress` row                                                                                                                     |               | Not run         |
+| 11  | Admin: new level in the editor (add, move, rotate, resize, delete vehicles)                                                                                            | live message "Solvable... N moves"; Save works; level appears and loads in the game                                                                             |               | Not run         |
+| 12  | Admin: unsolvable board (e.g. two trucks filling a column); par below optimal; empty title; duplicate title                                                            | each rejected with a clear message, nothing saved                                                                                                               |               | Not run         |
+| 13  | Admin: edit a level that has scores (layout change without confirmation, then with confirmation; metadata-only edit); delete a level                                   | board change without confirmation is rejected; confirmed board change clears only its scores; metadata-only edit preserves scores; delete asks for confirmation |               | Not run         |
+| 14  | Player opens `level_form.php` or POSTs `delete_level`                                                                                                                  | redirected / refused                                                                                                                                            |               | Not run         |
+| 15  | Profile, password change, My Progress reset (one level / all), admin delete record / reset player                                                                      | work; old Sokoban rows are NOT deleted (check in phpMyAdmin)                                                                                                    |               | Not run         |
+| 16  | Users page: add, edit, search, delete a player                                                                                                                         | work as before                                                                                                                                                  |               | Not run         |
+| 17  | Phone widths 360px and 375px: play, editor, levels, leaderboard                                                                                                        | board fits, vehicles are draggable, page scrolls outside the board                                                                                              |               | Not run         |
+| 18  | Railway: deploy, run `railway ssh -- php database/import.php migrate_sliding.sql`, repeat 4-8                                                                          | same results as local                                                                                                                                           |               | Not run         |
+
+## I. Known limitations and manual steps
+
+- The migration must be run once on every existing database (local and Railway) and a backup is recommended first.
+- `par_moves` of the six bundled levels is the proven optimum; an admin-set par may be higher than optimal (ratings use par).
+- The PHP solver stops at 200,000 states or 8 seconds and then rejects the level as "too complex to verify"; the six bundled levels need under 8,000 states.
+- Old Sokoban levels cannot be edited or deleted on the site; they can only be removed directly in the database (not recommended).
+- A player who loses the page after winning but before the save finishes must replay the level (there is no offline queue).
+- There is no level activation/publishing switch because the original application did not have one.
+- The editor needs JavaScript; the server still validates everything it receives.
+
+---
+
+# HISTORY: documentation and test records of the Sokoban version (Deliverables 2-4)
 
 ## Local setup (XAMPP)
 
@@ -16,7 +178,7 @@ Requirements: PHP 8.2+ with the `mysqli` extension, MySQL 8 or MariaDB 10.4+, Ap
    `C:\xampp\php\php.exe setup_admin.php` and answer the prompts. It refuses to run if an admin exists. (Windows shows the typed password.)
 7. Open http://localhost/gridlock-rescue/ . Register a player, then log in as player and as admin.
 
-## Railway deployment (Railpack, no Dockerfile) - PENDING: not yet deployed or tested
+## Railway deployment (Railpack, no Dockerfile) - the earlier Sokoban version is reported live by the team; this sliding-block version is NOT yet deployed or tested on Railway
 
 Railpack detects PHP from `index.php` / `composer.json` and serves it with FrankenPHP. `composer.json` requires PHP >= 8.2 and `ext-mysqli`, so the extension is installed automatically.
 
@@ -38,7 +200,7 @@ Railpack detects PHP from `index.php` / `composer.json` and serves it with Frank
 
 Notes: sessions are stored on the container disk, so a redeploy logs everyone out (acceptable for this project). The web root is the project root, so `database/*.sql`, `docs/` and `composer.json` can be downloaded; they contain no secrets. PHP files in `includes/` return 403 when opened directly.
 
-### Railway verification checklist (PENDING - NOT YET PERFORMED)
+### Railway verification checklist (no results recorded in this file; repeat it after deploying the sliding-block version)
 
 - [ ] Build log shows PHP 8.2+ and `mysqli` installed
 - [ ] Domain opens the login page (HTTP 200)
@@ -52,7 +214,7 @@ Notes: sessions are stored on the container disk, so a redeploy logs everyone ou
 ## Deliverable 2 test record - LOCAL XAMPP (team-executed)
 
 All 28 local test cases below were executed by the project team in their local XAMPP environment and **passed** (result reported by the team; no additional evidence was recorded).
-Railway was **not** part of this testing - see "Railway verification checklist (PENDING)" above.
+Railway was **not** part of this testing - see the Railway section above.
 | # | Test | Expected Result | Actual Result | Status |
 |---|---|---|---|---|
 | 1 | Open `/` while logged out | Login page shows | Matched expected result (team-reported, local XAMPP) | Passed |
@@ -84,7 +246,7 @@ Railway was **not** part of this testing - see "Railway verification checklist (
 | 27 | Phone width (375px) | Hamburger menu, stacked cards, no horizontal scroll | Matched expected result (team-reported, local XAMPP) | Passed |
 | 28 | View source of each page | `html > head > title > body` present | Matched expected result (team-reported, local XAMPP) | Passed |
 
-## Deliverable 3 - game engine and data integration
+## Deliverable 3 - game engine and data integration (HISTORICAL: Sokoban game, replaced by the sliding-block game)
 
 No new setup steps. Existing database and accounts are reused (the five sample levels already exist).
 Run the automated engine tests any time (needs Node.js, no browser): `node tests/engine.test.js`
@@ -167,7 +329,7 @@ Unchanged: authentication, sessions, `save_progress.php`, `play.php`, the SQL sc
 Every changing action: logged in, correct role checked on the server, `POST` only, CSRF token verified, input validated, prepared statement, flash message, redirect.
 Safeguards: administrators cannot be edited or deleted through the user pages (so you cannot delete yourself or the last administrator); roles can never be changed; usernames/emails are unique; levels cannot be saved unless the layout is valid.
 
-## 3. Level layout rules (server-side, `analyse_level_layout()`)
+## 3. Level layout rules (SUPERSEDED: Sokoban layout, see section B above for the current format)
 
 Characters `# - . $ * @ +` only; all rows the same length; 3x3 up to 15x15; exactly one player; at least one box; boxes = targets; the level must not start already solved; no empty rows in the middle. Width, height and box count are calculated from the text. The browser preview only gives early feedback.
 Note: the server cannot prove a level is _solvable_. Test Play every new level and enter a par only if you know a solution.
@@ -220,7 +382,7 @@ Local = tested by the team on local XAMPP (Deliverable 2, 3 and 4 test records i
 | 8 | All four CRUD operations with MySQLi | section 2 | Implemented; passed locally (D4 tests 1-40) |
 | 9 | Session controls content, no duplicate role pages | dashboard, levels, progress, profile, users | Implemented; passed locally (D2, D3, D4) |
 | 10 | CSS + Bootstrap, responsive, ids/classes | `style.css`, Bootstrap 5 | Implemented; passed locally (D2, D3, D4 test 45) |
-| - | Railway deployment | section "Railway" above | **PENDING - not deployed or verified** |
+| - | Railway deployment | section "Railway" above | Earlier version reported live by the team; sliding-block version **not yet deployed or verified** |
 
 ## 9. Deliverable 4 test record - LOCAL XAMPP (team-executed)
 

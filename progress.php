@@ -21,17 +21,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$is_admin && $action === 'reset_level' && $id !== false) {
         // The user id comes from the SESSION, so players can only touch their own record.
-        $result = db_execute($conn, 'DELETE FROM user_progress WHERE user_id = ? AND level_id = ?', 'ii', [$my_id, $id]);
-        set_flash($result['affected'] > 0 ? 'success' : 'warning', $result['affected'] > 0 ? 'The saved score for that level was reset.' : 'There was no saved score for that level.');
+        $removed = delete_sliding_progress($conn, $my_id, $id);
+        set_flash($removed > 0 ? 'success' : 'warning', $removed > 0 ? 'The saved score for that level was reset.' : 'There was no saved score for that level.');
     } elseif (!$is_admin && $action === 'reset_all') {
-        $result = db_execute($conn, 'DELETE FROM user_progress WHERE user_id = ?', 'i', [$my_id]);
-        set_flash('success', 'Your progress was reset (' . (int) $result['affected'] . ' record(s) removed). Level 1 is your starting level again.');
+        $removed = delete_sliding_progress($conn, $my_id);
+        set_flash('success', 'Your progress was reset (' . $removed . ' record(s) removed). Level 1 is your starting level again.');
     } elseif ($is_admin && $action === 'delete_record' && $id !== false) {
         $result = db_execute($conn, 'DELETE FROM user_progress WHERE progress_id = ?', 'i', [$id]);
         set_flash($result['affected'] > 0 ? 'success' : 'warning', $result['affected'] > 0 ? 'The progress record was deleted.' : 'That record no longer exists.');
     } elseif ($is_admin && $action === 'reset_player' && $id !== false) {
-        $result = db_execute($conn, 'DELETE FROM user_progress WHERE user_id = ?', 'i', [$id]);
-        set_flash('success', (int) $result['affected'] . ' progress record(s) of that player were deleted.');
+        $removed = delete_sliding_progress($conn, $id);
+        set_flash('success', $removed . ' progress record(s) of that player were deleted.');
     } else {
         set_flash('danger', 'That action is not allowed.');
     }
@@ -43,13 +43,14 @@ if ($is_admin) {
     $records_sql = 'SELECT p.progress_id, u.user_id, u.username, l.title, p.best_moves, p.completed_at
                     FROM user_progress p
                     JOIN users  u ON u.user_id  = p.user_id
-                    JOIN levels l ON l.level_id = p.level_id';
+                    JOIN levels l ON l.level_id = p.level_id
+                    WHERE l.game_type = \'sliding\'';
     $filter_id = filter_var($_GET['user_id'] ?? '', FILTER_VALIDATE_INT);
     if ($filter_id !== false && $filter_id > 0) {
         $filter_player = db_select_one($conn, "SELECT user_id, username FROM users WHERE user_id = ? AND role = 'user'", 'i', [$filter_id]);
     }
     if ($filter_player !== null) {
-        $records = db_select_all($conn, $records_sql . ' WHERE p.user_id = ? ORDER BY l.sort_order ASC, l.level_id ASC', 'i', [(int) $filter_player['user_id']]);
+        $records = db_select_all($conn, $records_sql . ' AND p.user_id = ? ORDER BY l.sort_order ASC, l.level_id ASC', 'i', [(int) $filter_player['user_id']]);
     } else {
         $records = db_select_all($conn, $records_sql . ' ORDER BY p.updated_at DESC, p.progress_id DESC LIMIT 200');
     }

@@ -1,6 +1,7 @@
 -- =============================================================================
 -- Gridlock Rescue - database setup (MySQL 8 / MariaDB 10.4+)       database/gridlock_rescue.sql
--- Creates the 3 approved tables and the sample levels. Safe to run more than once.
+-- Creates the 3 tables and the six sliding-block levels. Safe to run more than once, on a new OR an existing
+-- database (on an existing one the migration part below converts it without deleting anything).
 --
 -- BEFORE importing: create an empty database and select it.
 --   Local XAMPP : CREATE DATABASE gridlock_rescue CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -23,9 +24,10 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS levels (
     level_id    INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    game_type   ENUM('sokoban','sliding') NOT NULL DEFAULT 'sokoban',
     title       VARCHAR(60)  NOT NULL,
     hint        VARCHAR(255) NULL,
-    difficulty  ENUM('easy','medium','hard') NOT NULL DEFAULT 'easy',
+    difficulty  ENUM('easy','medium','hard','expert') NOT NULL DEFAULT 'easy',
     sort_order  INT UNSIGNED NOT NULL DEFAULT 1,
     grid_width  TINYINT UNSIGNED NOT NULL,
     grid_height TINYINT UNSIGNED NOT NULL,
@@ -33,7 +35,8 @@ CREATE TABLE IF NOT EXISTS levels (
     par_moves   INT UNSIGNED NULL,
     created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (level_id),
-    KEY idx_levels_order (sort_order, level_id)
+    KEY idx_levels_order (sort_order, level_id),
+    KEY idx_levels_game_order (game_type, sort_order, level_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS user_progress (
@@ -50,58 +53,91 @@ CREATE TABLE IF NOT EXISTS user_progress (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------
--- Sample levels. Layout characters:  # wall  - floor  . target  $ box  * box on target
---                                    @ player  + player on target
--- par_moves is the shortest solution found by an exhaustive search (checked before release).
--- Each INSERT is skipped if a level with the same title already exists.
+-- Sliding-block migration (no-ops on a fresh database)
 -- -----------------------------------------------------------------------------
+-- 1. levels.game_type (only if missing)
+SET @sql = (SELECT IF(COUNT(*) = 0,
+    'ALTER TABLE levels ADD COLUMN game_type ENUM(''sokoban'',''sliding'') NOT NULL DEFAULT ''sokoban'' AFTER level_id',
+    'SELECT 1')
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'levels' AND COLUMN_NAME = 'game_type');
+PREPARE gr_step FROM @sql;
+EXECUTE gr_step;
+DEALLOCATE PREPARE gr_step;
 
--- Level 1: Warm-Up (easy, 7x5, 1 box, shortest solution 1 moves: R)
-INSERT INTO levels (title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves)
-SELECT 'Warm-Up', 'Push the box onto the target.', 'easy', 1, 7, 5, '#######
-#-----#
-#-@$.-#
-#-----#
-#######', 1
-FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE title = 'Warm-Up');
+-- 2. index for "sliding levels in order" (only if missing)
+SET @sql = (SELECT IF(COUNT(*) = 0,
+    'ALTER TABLE levels ADD KEY idx_levels_game_order (game_type, sort_order, level_id)',
+    'SELECT 1')
+    FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'levels' AND INDEX_NAME = 'idx_levels_game_order');
+PREPARE gr_step FROM @sql;
+EXECUTE gr_step;
+DEALLOCATE PREPARE gr_step;
 
--- Level 2: Side Step (easy, 7x6, 1 box, shortest solution 5 moves: URULL)
-INSERT INTO levels (title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves)
-SELECT 'Side Step', 'The box has to change direction, so walk around it.', 'easy', 2, 7, 6, '#######
-#.----#
-#--$--#
-#--@--#
-#-----#
-#######', 5
-FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE title = 'Side Step');
+-- 3. allow the difficulty 'expert' (re-running this is harmless; existing values are kept)
+ALTER TABLE levels MODIFY difficulty ENUM('easy','medium','hard','expert') NOT NULL DEFAULT 'easy';
 
--- Level 3: Two Boxes (medium, 7x6, 2 boxes, shortest solution 7 moves: ULDURRD)
-INSERT INTO levels (title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves)
-SELECT 'Two Boxes', 'Two boxes, one lane between them. Mind the order.', 'medium', 3, 7, 6, '#######
-#-----#
-#-$@$-#
-#-.#.-#
-#-----#
-#######', 7
-FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE title = 'Two Boxes');
+-- 4. the six sliding-block levels.
+--    layout = 6 rows of 6 characters ('.' empty, 'R' rescue vehicle, other letters = vehicles);
+--    par_moves = optimal number of moves (checked by two independent solvers before release).
 
--- Level 4: Corner Pocket (medium, 7x6, 2 boxes, shortest solution 12 moves: RLLURULRRRDD)
-INSERT INTO levels (title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves)
-SELECT 'Corner Pocket', 'Never push a box into a corner it cannot leave.', 'medium', 4, 7, 6, '#######
-#.----#
-#-$-#-#
-#--@$-#
-#-#--.#
-#######', 12
-FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE title = 'Corner Pocket');
+-- Level 1: First Response (Easy, optimal 5 moves)
+INSERT INTO levels (game_type, title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves)
+SELECT 'sliding', 'First Response', 'Clear the blue truck in front of the exit, then drive out.', 'easy', 1, 6, 6, 'D..A..
+D..A.C
+.RRA.C
+..EEE.
+..BB..
+......', 5
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE game_type = 'sliding' AND title = 'First Response');
 
--- Level 5: Tight Squeeze (hard, 7x7, 3 boxes, shortest solution 22 moves: DDLLLUURULDDLDRRRUURUL)
-INSERT INTO levels (title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves)
-SELECT 'Tight Squeeze', 'Three boxes and narrow lanes. Plan before you push.', 'hard', 5, 7, 7, '#######
-#.-.--#
-#-$$-@#
-#--#--#
-#-$---#
-#.----#
-#######', 22
-FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE title = 'Tight Squeeze');
+-- Level 2: Crosstown Jam (Medium, optimal 10 moves)
+INSERT INTO levels (game_type, title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves)
+SELECT 'sliding', 'Crosstown Jam', 'Several vehicles block each other. Free the middle first.', 'medium', 2, 6, 6, '....IG
+.BB.IG
+CRRHIA
+C.DH.A
+C.DFFF
+EEE...', 10
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE game_type = 'sliding' AND title = 'Crosstown Jam');
+
+-- Level 3: Delivery Day (Medium, optimal 12 moves)
+INSERT INTO levels (game_type, title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves)
+SELECT 'sliding', 'Delivery Day', 'Almost every vehicle has to move once. Find the right order.', 'medium', 3, 6, 6, 'FFF.E.
+CCC.EH
+RRB.EH
+..BII.
+.AA.GG
+.DD...', 12
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE game_type = 'sliding' AND title = 'Delivery Day');
+
+-- Level 4: Truck Convoy (Hard, optimal 14 moves)
+INSERT INTO levels (game_type, title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves)
+SELECT 'sliding', 'Truck Convoy', 'Long trucks form a wall in front of the exit. Take them out one by one.', 'hard', 4, 6, 6, '.HAF.C
+.HAFIC
+RRAFI.
+GG..I.
+J..BBD
+J..EED', 14
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE game_type = 'sliding' AND title = 'Truck Convoy');
+
+-- Level 5: Bottleneck (Hard, optimal 17 moves)
+INSERT INTO levels (game_type, title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves)
+SELECT 'sliding', 'Bottleneck', 'Only one truck blocks the exit, but freeing it takes a long chain of moves.', 'hard', 5, 6, 6, 'BEEE.D
+BJ..GD
+.JRRG.
+K.CCGH
+K.ALLH
+FFAII.', 17
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE game_type = 'sliding' AND title = 'Bottleneck');
+
+-- Level 6: Gridlock Gauntlet (Expert, optimal 20 moves)
+INSERT INTO levels (game_type, title, hint, difficulty, sort_order, grid_width, grid_height, layout, par_moves)
+SELECT 'sliding', 'Gridlock Gauntlet', 'Every move unlocks another. Plan the order before you start.', 'expert', 6, 6, 6, 'CFF.DD
+C..HHH
+GRRK..
+GLLK.A
+..IJJA
+BBIEEA', 20
+FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE game_type = 'sliding' AND title = 'Gridlock Gauntlet');

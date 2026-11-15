@@ -20,10 +20,15 @@
   --bs-link-color: #2f63c8;
 }
 
+html {
+  scroll-padding-top: 66px;
+}
+
 body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  padding-top: 66px;
 }
 h1,
 h2,
@@ -37,11 +42,21 @@ h3,
 }
 
 /* ---------- navbar ---------- */
+
+#main-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 1030;
+}
+
 .navbar-gr {
   background: var(--gr-navy);
   padding-top: 0.65rem;
   padding-bottom: 0.65rem;
 }
+
 .navbar-gr .navbar-brand {
   color: #fff;
   font-size: 1.15rem;
@@ -294,52 +309,6 @@ button:focus-visible {
 }
 
 /* ---------- board cells (same classes the game board will use in Deliverable 3) ---------- */
-.board {
-  display: grid;
-  grid-template-columns: repeat(var(--cols), var(--cell, 40px));
-  width: max-content;
-  background: var(--gr-navy);
-  border-radius: 8px;
-  overflow: hidden;
-}
-.cell {
-  position: relative;
-  width: var(--cell, 40px);
-  height: var(--cell, 40px);
-  background: var(--gr-floor);
-  border: 1px solid var(--gr-navy);
-}
-.cell.wall {
-  background: var(--gr-slate);
-}
-.cell.target::after {
-  content: "";
-  position: absolute;
-  inset: 30%;
-  border: 3px solid var(--gr-teal);
-  border-radius: 50%;
-}
-.cell.box::before {
-  content: "";
-  position: absolute;
-  inset: 14%;
-  background: var(--gr-amber);
-  border: 2px solid var(--gr-navy);
-  border-radius: 4px;
-  z-index: 1;
-}
-.cell.box.target::before {
-  background: var(--gr-green);
-}
-.cell.player::before {
-  content: "";
-  position: absolute;
-  inset: 19%;
-  background: var(--gr-coral);
-  border: 2px solid #fff;
-  border-radius: 50%;
-  z-index: 2;
-}
 
 /* ---------- small screens ---------- */
 @media (max-width: 575.98px) {
@@ -409,147 +378,12 @@ button:focus-visible {
 }
 
 /* gameplay page */
-.board-card {
-  align-items: center;
-}
-.board-wrap {
-  position: relative;
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  padding: 1rem 0;
-}
-.board-game {
-  margin: 0 auto;
-  box-shadow: 0 4px 14px rgba(27, 42, 65, 0.25);
-}
-.move-count {
-  font:
-    600 3rem/1.1 "Poppins",
-    sans-serif;
-  color: var(--gr-navy);
-  margin-bottom: 0.25rem;
-}
-.board-legend {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem 1.25rem;
-  margin: 0.5rem 0 0;
-  font-size: 0.8rem;
-  color: var(--gr-muted);
-}
-.board-legend li {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-.legend-swatch {
-  --cell: 24px;
-  display: inline-block;
-  flex: 0 0 auto;
-}
-
-.win-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(27, 42, 65, 0.88);
-  border-radius: 8px;
-  padding: 1rem;
-}
-.win-overlay.d-none {
-  display: none !important;
-}
-.win-box {
-  text-align: center;
-  color: #fff;
-  max-width: 420px;
-}
-.win-box h2 {
-  color: var(--gr-amber);
-  font-size: 1.6rem;
-}
-.win-line {
-  font-size: 1.1rem;
-  margin-bottom: 0.25rem;
-}
-.win-status {
-  min-height: 1.5rem;
-  color: #c9d3df;
-}
 
 /* on-screen controls (small screens only) */
-.dpad {
-  display: grid;
-  grid-template-columns: repeat(3, 56px);
-  grid-template-rows: repeat(2, 56px);
-  gap: 6px;
-  justify-content: center;
-}
-
-.dpad-container {
-  position: fixed;
-  align-self: center;
-  bottom: 2rem;
-
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  background-color: rgba(255, 255, 255, 0.45);
-
-  display: inline-grid;
-  padding: 16px;
-  border-radius: 20px;
-
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08);
-}
-
-.dpad-btn {
-  font-size: 1.25rem;
-  padding: 0;
-}
-.dpad-up {
-  grid-column: 2;
-  grid-row: 1;
-}
-.dpad-left {
-  grid-column: 1;
-  grid-row: 2;
-}
-.dpad-down {
-  grid-column: 2;
-  grid-row: 2;
-}
-.dpad-right {
-  grid-column: 3;
-  grid-row: 2;
-}
 
 /* =====================  Deliverable 4: management pages  ===================== */
 .form-card {
   max-width: 640px;
-}
-.layout-input {
-  font-family: "Roboto Mono", Consolas, "Courier New", monospace;
-  font-size: 0.95rem;
-  line-height: 1.3;
-  white-space: pre;
-  overflow-x: auto;
-}
-.legend-text {
-  font-family: Consolas, "Courier New", monospace;
-  font-size: 0.85rem;
-  background: #f4f6f8;
-  border-radius: 6px;
-  padding: 0.6rem 0.8rem;
-}
-.preview-wrap {
-  overflow-x: auto;
-  padding: 0.25rem 0;
 }
 .avatar {
   display: flex;
@@ -582,4 +416,490 @@ button:focus-visible {
   --bs-btn-hover-border-color: var(--gr-coral);
   --bs-btn-active-bg: #c9461f;
   --bs-btn-active-border-color: #c9461f;
+}
+
+/* =====================  Sliding-block traffic puzzle (play.php, level editor, login picture)  ===================== */
+.badge-expert {
+  background: #fdeae6;
+  color: #8f1f0a;
+  border: 1px solid #e4572e;
+}
+.btn[aria-pressed="true"] {
+  background: var(--gr-navy);
+  color: #fff;
+}
+
+.sl-wrap {
+  max-width: 640px;
+  margin: 0 auto;
+}
+.sl-hud {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+.sl-moves {
+  color: var(--gr-amber);
+  background: var(--gr-navy);
+  border-radius: 8px;
+  display: inline-block;
+  padding: 0 0.6rem;
+}
+.sl-board-area {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+.sl-frame {
+  position: relative;
+  margin-right: 32px; /* room for the exit lane (EXIT_W in game.js) */
+  padding: 6px; /* FRAME_W / 2 */
+  background: #0e1624;
+  border-radius: 16px;
+  box-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 2px #3b4b63;
+}
+.sl-board {
+  position: relative;
+  width: calc(var(--cell) * 6);
+  height: calc(var(--cell) * 6);
+  border-radius: 8px;
+  overflow: hidden;
+  touch-action: none;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px) 0 0 /
+      var(--cell) var(--cell),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px) 0 0 /
+      var(--cell) var(--cell),
+    linear-gradient(135deg, #2a3340, #313b49);
+}
+.sl-board::after {
+  /* dashed centre line of the exit lane (row 3) */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--cell) * 2.5 - 1px);
+  height: 2px;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.35) 0 14px,
+    transparent 14px 28px
+  );
+}
+.sl-exit-gap {
+  position: absolute;
+  right: 2px;
+  width: 12px;
+  top: calc(6px + var(--cell) * 2 + 4px);
+  height: calc(var(--cell) - 8px);
+  background: linear-gradient(90deg, #313b49, #3b8f5a);
+}
+.sl-exit {
+  position: absolute;
+  right: -32px;
+  top: calc(6px + var(--cell) * 2);
+  height: var(--cell);
+  width: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #1c9a5a;
+  font-weight: 700;
+}
+.sl-exit-arrow {
+  font-size: 1.3rem;
+  animation: sl-nudge 1s ease-in-out infinite;
+}
+.sl-exit-text {
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+}
+@keyframes sl-nudge {
+  50% {
+    transform: translateX(5px);
+  }
+}
+
+/* ---------- vehicles ---------- */
+.sl-vehicle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border: 0;
+  padding: 0;
+  cursor: grab;
+  border-radius: 12px;
+  background: var(--body, #4a90d9);
+  box-shadow:
+    0 6px 10px rgba(0, 0, 0, 0.4),
+    inset 0 -6px 0 rgba(0, 0, 0, 0.18),
+    inset 0 3px 0 rgba(255, 255, 255, 0.28);
+  transition: transform 0.2s cubic-bezier(0.3, 0.7, 0.3, 1);
+  touch-action: none;
+  outline: none;
+}
+.sl-vehicle.dragging {
+  transition: none;
+  cursor: grabbing;
+  z-index: 5;
+  box-shadow:
+    0 12px 18px rgba(0, 0, 0, 0.5),
+    inset 0 3px 0 rgba(255, 255, 255, 0.28);
+}
+.sl-vehicle.selected {
+  outline: 3px solid var(--gr-amber);
+  outline-offset: 2px;
+  z-index: 4;
+}
+.sl-vehicle:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+.sl-vehicle.blocked {
+  animation: sl-shake 0.25s;
+}
+@keyframes sl-shake {
+  25% {
+    translate: -4px 0;
+  }
+  75% {
+    translate: 4px 0;
+  }
+}
+.sl-vehicle .glass {
+  position: absolute;
+  background: linear-gradient(180deg, #a8d8f0, #5f8fb3);
+  border-radius: 6px;
+  opacity: 0.92;
+}
+.sl-vehicle.h .glass {
+  top: 20%;
+  bottom: 20%;
+  right: 14%;
+  width: 26%;
+}
+.sl-vehicle.v .glass {
+  left: 20%;
+  right: 20%;
+  bottom: 14%;
+  height: 26%;
+}
+.sl-vehicle .glass2 {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
+}
+.sl-vehicle.h.len3 .glass2 {
+  top: 24%;
+  bottom: 24%;
+  left: 14%;
+  width: 40%;
+}
+.sl-vehicle.v.len3 .glass2 {
+  left: 24%;
+  right: 24%;
+  top: 14%;
+  height: 40%;
+}
+.sl-vehicle .lamp {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #fff3b0;
+  box-shadow: 0 0 8px #ffe680;
+}
+.sl-vehicle.h .lamp {
+  right: 3px;
+}
+.sl-vehicle.h .lamp.a {
+  top: 12%;
+}
+.sl-vehicle.h .lamp.b {
+  bottom: 12%;
+}
+.sl-vehicle.v .lamp {
+  bottom: 3px;
+}
+.sl-vehicle.v .lamp.a {
+  left: 12%;
+}
+.sl-vehicle.v .lamp.b {
+  right: 12%;
+}
+.sl-vehicle.rescue {
+  --body: #e0342b;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 8px 16px rgba(224, 52, 43, 0.55),
+    inset 0 -6px 0 rgba(0, 0, 0, 0.2),
+    inset 0 3px 0 rgba(255, 255, 255, 0.35);
+}
+.sl-vehicle.rescue::before {
+  /* white cross emblem */
+  content: "+";
+  position: absolute;
+  left: 14%;
+  top: 50%;
+  transform: translateY(-52%);
+  color: #fff;
+  font:
+    700 1.9rem/1 "Poppins",
+    sans-serif;
+}
+.sl-vehicle.rescue .siren-bar {
+  position: absolute;
+  left: 44%;
+  top: 4px;
+  width: 22%;
+  height: 8px;
+  border-radius: 4px;
+  animation: sl-siren 0.5s steps(2) infinite;
+}
+@keyframes sl-siren {
+  0% {
+    background: #4da3ff;
+    box-shadow: 0 0 10px #4da3ff;
+  }
+  50% {
+    background: #fff;
+    box-shadow: 0 0 10px #fff;
+  }
+  100% {
+    background: #4da3ff;
+  }
+}
+.sl-vehicle.exiting {
+  transition:
+    transform 0.7s ease-in,
+    opacity 0.7s ease-in;
+  opacity: 0;
+}
+/* direction cue on the selected vehicle: shows which way it slides */
+.sl-vehicle.selected::after {
+  content: "\2194";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(255, 255, 255, 0.9);
+  font:
+    700 1rem/1 "Poppins",
+    sans-serif;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.sl-vehicle.selected.v::after {
+  content: "\2195";
+}
+
+/* ---------- controls, hints, completion overlay ---------- */
+.sl-controls {
+  display: flex;
+  gap: 10px;
+  margin: 1rem 0 0.5rem;
+  justify-content: center;
+}
+.sl-hint {
+  text-align: center;
+  color: #8a5a00;
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.9rem;
+}
+.sl-help {
+  text-align: center;
+  color: var(--gr-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin: 0 auto;
+  max-width: 460px;
+}
+.sl-help-touch {
+  display: none;
+}
+@media (pointer: coarse) {
+  .sl-help-keys {
+    display: none;
+  }
+  .sl-help-touch {
+    display: block;
+  }
+}
+.sl-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 20;
+  background: rgba(10, 16, 28, 0.78);
+  backdrop-filter: blur(3px);
+  border-radius: 16px;
+  animation: sl-fade 0.3s;
+}
+.sl-overlay.d-none {
+  display: none !important;
+}
+@keyframes sl-fade {
+  from {
+    opacity: 0;
+  }
+}
+.sl-win-box {
+  width: min(320px, calc(100% - 24px));
+  text-align: center;
+  padding: 1.4rem 1.6rem;
+  color: #fff;
+  background: var(--gr-navy-2);
+  border: 2px solid var(--gr-amber);
+  border-radius: 16px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+.sl-win-box h2 {
+  margin: 0.3rem 0;
+  color: var(--gr-amber);
+  font-size: 1.5rem;
+}
+.sl-win-moves {
+  font-size: 1.05rem;
+  margin: 0.2rem 0;
+}
+.sl-win-rating {
+  color: #7ce8b8;
+  font-weight: 600;
+  margin: 0.2rem 0;
+}
+.sl-win-status {
+  min-height: 1.4em;
+  color: #c9d3df;
+  font-size: 0.9rem;
+}
+.sl-siren {
+  width: 54px;
+  height: 10px;
+  margin: 0 auto;
+  border-radius: 6px;
+  animation: sl-siren 0.5s steps(2) infinite;
+}
+
+/* ---------- level editor ---------- */
+.sl-editor-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.sl-editor-area {
+  margin: 0.5rem 0 0.75rem;
+}
+.sl-editor-board {
+  cursor: copy;
+}
+.sl-vehicle.sl-static {
+  cursor: pointer;
+  transition: none;
+}
+.sl-label {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font:
+    700 0.85rem/1 "Poppins",
+    sans-serif;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+.sl-vehicle.rescue .sl-label {
+  left: auto;
+  right: 18%;
+  transform: translateY(-50%);
+}
+.sl-vehicle.sl-static.selected::after {
+  display: none;
+}
+.editor-check {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.editor-check.ok {
+  color: #0e7567;
+}
+.editor-check.bad {
+  color: var(--gr-coral);
+}
+.editor-check.pending {
+  color: var(--gr-muted);
+}
+
+/* ---------- login page picture ---------- */
+.sl-mini {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(6, 38px);
+  grid-template-rows: repeat(3, 38px);
+  gap: 3px;
+  width: max-content;
+  padding: 8px 8px 8px 8px;
+  margin-bottom: 0.5rem;
+  background: #0e1624;
+  border-radius: 12px;
+}
+.sl-mini-vehicle {
+  border-radius: 8px;
+  background: var(--c, #4a90d9);
+  box-shadow:
+    inset 0 -4px 0 rgba(0, 0, 0, 0.2),
+    inset 0 2px 0 rgba(255, 255, 255, 0.3);
+}
+.sl-mini-vehicle.rescue {
+  --c: #e0342b;
+}
+.sl-mini-vehicle.car-a {
+  --c: #f2b134;
+}
+.sl-mini-vehicle.car-b {
+  --c: #3dbe7a;
+}
+.sl-mini-vehicle.car-c {
+  --c: #8e6bd8;
+}
+.sl-mini-vehicle.car-d {
+  --c: #2bb5c9;
+}
+.sl-mini-vehicle.car-e {
+  --c: #ee8a3c;
+}
+.sl-mini-exit {
+  position: absolute;
+  right: -62px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #5be38f;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+/* ---------- small screens ---------- */
+@media (max-width: 520px) {
+  .sl-hud {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .sl-controls .btn {
+    flex: 1;
+    padding: 0.75rem 0.5rem;
+  }
+  .sl-vehicle.rescue::before {
+    font-size: 1.4rem;
+  }
+  .sl-mini-exit {
+    display: none;
+  }
 }
