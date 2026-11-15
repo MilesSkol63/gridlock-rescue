@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600&display=swap" rel="stylesheet">
     <link href="assets/css/style.css" rel="stylesheet">
 </head>
-<body class="auth-body">
+<body class="auth-body" id="auth-header">
     <header class="auth-topbar">
         <div class="container-fluid px-lg-4 d-flex align-items-center gap-2">
             <span class="brand-logo">GR</span>

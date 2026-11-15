@@ -251,6 +251,10 @@ button:focus-visible {
 }
 
 /* ---------- login / register ---------- */
+
+html #auth-header {
+  padding-top: 0;
+}
 .auth-topbar {
   background: var(--gr-navy);
   padding: 0.8rem 0;
