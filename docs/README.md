@@ -444,24 +444,4 @@ These tests are local only. Railway has not been tested.
 | 45             | Phone width (375px): Users, Levels, Level form, Progress, Profile, game | Usable, no sideways page scroll                                        | Matched expected result (team-reported, local XAMPP) | Passed |
 | 46             | View source of each new page                                            | `html > head > title > body` present                                   | Matched expected result (team-reported, local XAMPP) | Passed |
 
-## 10. Submission preparation
 
-- Zip name: `GridlockRescue_Project.zip`. Video name: `GridlockRescue_Demo.mp4`.
-- The ZIP must contain the project folder with `database/gridlock_rescue.sql`, `assets/`, `includes/` and `docs/`.
-- It must NOT contain `includes/config.local.php`, any `.env` file, or other zip files (the `.gitignore` lists them). Check the zip before submitting.
-- Railway is not yet deployed or verified: complete the Railway checklist before claiming a live URL. Local XAMPP testing is complete.
-
-## 11. Suggested demo video (about 8 minutes)
-
-1. (0:30) Intro: project name, stack, local XAMPP, show the three database tables in phpMyAdmin.
-2. (0:45) Visitor opens a protected URL -> redirected to login; register a new player (show validation errors first).
-3. (0:30) Log in as the player; show the dashboard with empty states and the navbar.
-4. (2:00) Play Level 1: movement, wall, push, undo, restart, win; show "progress saved"; Level 2 unlocks; show the `user_progress` row in phpMyAdmin.
-5. (0:45) Leaderboard, My Progress, Profile (change username, change password).
-6. (0:30) Reset one level in My Progress; dashboard updates.
-7. (0:30) Logout; try the browser back button; try `users.php` while logged out.
-8. (0:30) Log in as administrator: same dashboard, different content and navbar.
-9. (1:00) Users: search, add player, edit, delete (show the confirmation text and the progress rows disappearing).
-10. (1:30) Levels: create an invalid level (show errors), then a valid one; preview; Test Play; edit; delete.
-11. (0:30) Progress Records: delete a record; show a player trying an admin URL and being refused.
-12. (0:30) Show the code structure briefly (`auth.php`, `navbar.php`, one prepared statement) and close.
