@@ -30,6 +30,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $account = get_session_account();
 if ($account === null) {
+    if (account_was_disabled()) {
+        json_reply(403, false, 'Your account has been disabled. Please contact an administrator.');
+    }
     json_reply(401, false, 'Your session has expired. Please log in again.');
 }
 if (!csrf_header_is_valid()) {

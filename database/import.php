@@ -4,6 +4,7 @@
  * through the application's own MySQLi connection (works on Railway's private network).
  *     php database/import.php                      -> gridlock_rescue.sql (new OR existing database, safe to repeat)
  *     php database/import.php migrate_sliding.sql  -> only the Sokoban -> sliding-block migration
+ *     php database/import.php migrate_user_status.sql -> only the account status (disable/enable) migration
  * Safe to run again: tables use IF NOT EXISTS, the migration is guarded and the levels are skipped if present.
  */
 if (PHP_SAPI !== 'cli') {
@@ -14,7 +15,7 @@ if (PHP_SAPI !== 'cli') {
 require_once __DIR__ . '/../includes/config.php';
 require_once __DIR__ . '/../includes/db.php';
 
-$allowed = ['gridlock_rescue.sql', 'migrate_sliding.sql'];
+$allowed = ['gridlock_rescue.sql', 'migrate_sliding.sql', 'migrate_user_status.sql'];
 $file = $argv[1] ?? 'gridlock_rescue.sql';
 if (!in_array($file, $allowed, true)) {
     fwrite(STDERR, 'Unknown file. Use one of: ' . implode(', ', $allowed) . PHP_EOL);

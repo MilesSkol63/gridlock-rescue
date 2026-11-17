@@ -162,6 +162,43 @@ Sabotage check: four deliberate engine breakages (no collision check, early vict
 - There is no level activation/publishing switch because the original application did not have one.
 - The editor needs JavaScript; the server still validates everything it receives.
 
+## J. Account status: disable / enable instead of deleting users
+
+Administrators can no longer delete user accounts. `users.php` now shows an **Active / Disabled** badge and a **Disable Account** or **Enable Account** button
+(confirmation dialog first, POST + CSRF + administrator check). Nothing is deleted: profile, password hash, role, progress, scores and leaderboard history stay.
+The delete handler, button and dialog text were removed; no other permanent user-deletion path exists in the application (the database cascade rules were left in place).
+
+- **Database:** `users.is_active TINYINT(1) NOT NULL DEFAULT 1` (1 = active). `database/migrate_user_status.sql` adds it only if missing; existing users stay active; nothing else changes. The combined `database/gridlock_rescue.sql` contains the same guarded step.
+- **Apply to your existing database (back it up first):** local: import `database/migrate_user_status.sql` in phpMyAdmin (database selected) or run `php database/import.php migrate_user_status.sql`. Railway: deploy, then `railway ssh -- php database/import.php migrate_user_status.sql`. **Run the migration before (or right after) deploying the new code**: the new login query reads `is_active` and fails until the column exists. Nothing in this package touches your live database.
+- **Login:** a disabled account is refused with "This account has been disabled. Please contact an administrator." - shown only after the correct password, so wrong passwords still get the generic message.
+- **Open sessions:** `get_session_account()` / `require_login()` read `is_active` on every authenticated request. A disabled user (player or administrator) is logged out on the next request, the session is destroyed and the login page explains why. `save_progress.php` answers 403 with the same reason.
+- **Safeguards (all on the server, in one transaction that locks the administrator rows):** only an active administrator may change statuses; you cannot disable your own account; an administrator can only be disabled while another active administrator remains; repeated or unknown requests are refused.
+- **Registration** and "Add Player" create active accounts (column default). **Level progression, scoring, leaderboard and the sliding-block game are unchanged**; disabled players stay on the leaderboard because their history is preserved.
+- **Files created:** `database/migrate_user_status.sql`, `tests/account_status_sql.test.js`, `tests/account_status_logic.test.js`, `tests/php/account_status_test.php`.
+  **Modified:** `users.php`, `index.php`, `includes/auth.php`, `includes/functions.php` (`set_account_active()`), `save_progress.php`, `assets/js/app.js` (button colour in the dialog), `assets/css/style.css` (status badges), `database/gridlock_rescue.sql`, `database/import.php`, `tests/sql_seed.test.js`, `tests/run_all.js`, `docs/README.md`.
+
+### Account-status test report
+
+**Executed here (Node):** `node tests/run_all.js` - engine 129, editor 35, SQL seed 40 (adjusted to allow the one guarded column), account-status SQL/code checks 18, account-status logic simulation 19, game UI 47; **all passed**. The simulation runs the disable/enable rules on SQLite (not MySQL, not the PHP code). The SQL/code checks confirm the migration is guarded and non-destructive and that no `DELETE FROM users` / `delete_user` remains in the application.
+**Executed here (static):** lexer, bracket and undefined-function checks of all 26 PHP files (no problems); all links and script targets exist.
+**NOT run:** PHP and MySQL (not available here): `php -l`, the real-database test `php tests/php/account_status_test.php` (needs a database named `*_test`; it refuses to run elsewhere), the migration on a real database, all pages in a browser, Railway.
+| # | Test (local XAMPP) | Expected Result | Actual Result | Status |
+|---|---|---|---|---|
+| 1 | `php -l` on every PHP file; `php tests/php/account_status_test.php` on a `*_test` database | no errors; ALL PASSED | | Not run |
+| 2 | Run `migrate_user_status.sql` twice on a copy of your database | column exists once; all users active; user and progress counts unchanged | | Not run |
+| 3 | Admin: Users page | Active/Disabled badges; Disable button on others, "Your account" on yours; no Delete anywhere | | Not run |
+| 4 | Disable a player (confirm dialog) | success message; badge turns Disabled; row, progress and leaderboard entry remain | | Not run |
+| 5 | Disabled player tries to log in (right password / wrong password) | "account has been disabled" / generic invalid message | | Not run |
+| 6 | Player logged in (second browser), admin disables them, player clicks any link or opens `play.php` directly | logged out, login page shows the disabled message | | Not run |
+| 7 | Same while the player is mid-game and finishes the level | save is refused (403) | | Not run |
+| 8 | Enable the player | can log in; old progress and scores are all there | | Not run |
+| 9 | Disable your own account (button hidden; also POST `disable_user` with your id via dev tools) | refused | | Not run |
+| 10 | Two administrators: disable the other one; then the disabled one tries any admin action | works once; disabled one is logged out / refused | | Not run |
+| 11 | Only one active administrator remains: try to disable them (POST) | refused | | Not run |
+| 12 | Player (or logged-out visitor) POSTs `disable_user` / `enable_user`; or sends GET `users.php?action=disable_user&id=..` | redirected / nothing changes | | Not run |
+| 13 | POST without or with a wrong CSRF token | refused | | Not run |
+| 14 | Register, login, logout, edit user, dashboards, levels, play + save a level, leaderboard | all unchanged | | Not run |
+
 ---
 
 # HISTORY: documentation and test records of the Sokoban version (Deliverables 2-4)

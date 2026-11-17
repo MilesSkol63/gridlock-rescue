@@ -170,6 +170,76 @@ function get_level($conn, $level_id)
     );
 }
 
+/**
+ * Disables or enables an account (administrators use this instead of deleting users).
+ * Nothing is ever deleted: profile, password hash, role, progress and scores stay exactly as they are.
+ *
+ * All checks run INSIDE one transaction while the administrator rows are locked, so two administrators can never
+ * disable each other (or the last active administrator) at the same moment.
+ * Rules: the actor must be an active administrator; you cannot disable your own account; an administrator can only be
+ * disabled while another ACTIVE administrator remains.
+ * Returns ['ok' => bool, 'error' => string, 'message' => string].
+ */
+function set_account_active($conn, $actor_id, $target_id, $make_active)
+{
+    $actor_id = (int) $actor_id;
+    $target_id = (int) $target_id;
+    $result = ['ok' => false, 'error' => '', 'message' => ''];
+
+    try {
+        mysqli_begin_transaction($conn);
+
+        // lock all administrator rows in a fixed order, then the target row
+        $admins = db_select_all($conn, 'SELECT user_id, is_active FROM users WHERE role = \'admin\' ORDER BY user_id FOR UPDATE');
+        $target = db_select_one($conn, 'SELECT user_id, username, role, is_active FROM users WHERE user_id = ? FOR UPDATE', 'i', [$target_id]);
+
+        $actor_is_active_admin = false;
+        $other_active_admins = 0;
+        foreach ($admins as $admin) {
+            if ((int) $admin['user_id'] === $actor_id && (int) $admin['is_active'] === 1) {
+                $actor_is_active_admin = true;
+            }
+            if ((int) $admin['user_id'] !== $target_id && (int) $admin['is_active'] === 1) {
+                $other_active_admins++;
+            }
+        }
+
+        if (!$actor_is_active_admin) {
+            $result['error'] = 'Only an active administrator can change account status.';
+        } elseif ($target === null) {
+            $result['error'] = 'That account no longer exists.';
+        } elseif ($make_active && (int) $target['is_active'] === 1) {
+            $result['error'] = 'That account is already active.';
+        } elseif (!$make_active && (int) $target['is_active'] === 0) {
+            $result['error'] = 'That account is already disabled.';
+        } elseif (!$make_active && $target_id === $actor_id) {
+            $result['error'] = 'You cannot disable your own account.';
+        } elseif (!$make_active && $target['role'] === 'admin' && $other_active_admins < 1) {
+            $result['error'] = 'The last active administrator cannot be disabled.';
+        }
+
+        if ($result['error'] !== '') {
+            mysqli_rollback($conn);
+            return $result;
+        }
+
+        db_execute($conn, 'UPDATE users SET is_active = ? WHERE user_id = ?', 'ii', [$make_active ? 1 : 0, $target_id]);
+        mysqli_commit($conn);
+
+        $result['ok'] = true;
+        $result['message'] = $make_active
+            ? 'Account "' . $target['username'] . '" was enabled. The player can log in again and keeps all saved progress.'
+            : 'Account "' . $target['username'] . '" was disabled. It can no longer log in or use the site, and all data and progress are preserved.';
+        return $result;
+    } catch (mysqli_sql_exception $ex) {
+        mysqli_rollback($conn);
+        error_log('Gridlock Rescue: set_account_active failed: ' . $ex->getMessage());
+        $result['ok'] = false;
+        $result['error'] = 'The account status could not be changed. Please try again.';
+        return $result;
+    }
+}
+
 /** Number of different vehicles in a layout text (the rescue vehicle R included). */
 function sliding_vehicle_count($layout)
 {

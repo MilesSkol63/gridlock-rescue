@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Prepared statement: the user input is never glued into the SQL text.
         $account = db_select_one(
             $conn,
-            'SELECT user_id, username, password_hash, role FROM users WHERE username = ? OR email = ? LIMIT 1',
+            'SELECT user_id, username, password_hash, role, is_active FROM users WHERE username = ? OR email = ? LIMIT 1',
             'ss',
             [$identifier, $identifier]
         );
@@ -43,11 +43,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password_ok = password_verify($password, $hash);
 
         if ($account !== null && $password_ok) {
-            login_user($account);                 // regenerates the session ID
-            redirect('dashboard.php');
+            if ((int) $account['is_active'] !== 1) {
+                // Only someone who knows the correct password learns that the account is disabled.
+                $errors['form'] = 'This account has been disabled. Please contact an administrator.';
+            } else {
+                login_user($account);             // regenerates the session ID
+                redirect('dashboard.php');
+            }
+        } else {
+            // Same message for "no such user" and "wrong password".
+            $errors['form'] = 'Invalid username/email or password.';
         }
-        // Same message for "no such user" and "wrong password".
-        $errors['form'] = 'Invalid username/email or password.';
     }
 }
 ?>
@@ -64,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@600&display=swap" rel="stylesheet">
     <link href="assets/css/style.css" rel="stylesheet">
 </head>
-<body class="auth-body" id="auth-header">
+<body class="auth-body">
     <header class="auth-topbar">
         <div class="container-fluid px-lg-4 d-flex align-items-center gap-2">
             <span class="brand-logo">GR</span>

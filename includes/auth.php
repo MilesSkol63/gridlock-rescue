@@ -111,20 +111,35 @@ function redirect_if_logged_in()
  * Returns ['user_id', 'username', 'role'] or null (no session / account deleted / bad role).
  * The role and username in the session are refreshed from the database.
  */
+/** True when the last get_session_account() call found a DISABLED account (so callers can show the right message). */
+function account_was_disabled($set = null)
+{
+    static $flag = false;
+    if ($set !== null) {
+        $flag = (bool) $set;
+    }
+    return $flag;
+}
+
 function get_session_account()
 {
     global $conn;
 
+    account_was_disabled(false);
     if (empty($_SESSION['user_id'])) {
         return null;
     }
     $account = db_select_one(
         $conn,
-        'SELECT user_id, username, role FROM users WHERE user_id = ?',
+        'SELECT user_id, username, role, is_active FROM users WHERE user_id = ?',
         'i',
         [(int) $_SESSION['user_id']]
     );
     if ($account === null || !in_array($account['role'], ['user', 'admin'], true)) {
+        return null;
+    }
+    if ((int) $account['is_active'] !== 1) {
+        account_was_disabled(true);              // checked on EVERY request, so an open session ends immediately
         return null;
     }
     $_SESSION['username'] = $account['username'];
@@ -151,9 +166,14 @@ function require_login()
 
     $account = get_session_account();
     if ($account === null) {
+        $disabled = account_was_disabled();
         destroy_session();
         start_fresh_session();
-        set_flash('warning', 'Your session is no longer valid. Please log in again.');
+        if ($disabled) {
+            set_flash('danger', 'Your account has been disabled. Please contact an administrator.');
+        } else {
+            set_flash('warning', 'Your session is no longer valid. Please log in again.');
+        }
         redirect('index.php');
     }
     return $account;

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
     email         VARCHAR(100) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role          ENUM('user','admin') NOT NULL DEFAULT 'user',
+    is_active     TINYINT(1) NOT NULL DEFAULT 1,
     created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id),
     UNIQUE KEY uq_users_username (username),
@@ -141,3 +142,15 @@ GLLK.A
 ..IJJA
 BBIEEA', 20
 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM levels WHERE game_type = 'sliding' AND title = 'Gridlock Gauntlet');
+
+-- -----------------------------------------------------------------------------
+-- Account status migration (no-op on a fresh database; existing users stay active)
+-- -----------------------------------------------------------------------------
+SET @sql = (SELECT IF(COUNT(*) = 0,
+    'ALTER TABLE users ADD COLUMN is_active TINYINT(1) NOT NULL DEFAULT 1 AFTER role',
+    'SELECT 1')
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'is_active');
+PREPARE gr_step FROM @sql;
+EXECUTE gr_step;
+DEALLOCATE PREPARE gr_step;

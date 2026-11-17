@@ -4,7 +4,8 @@
  *   Create: "Add Player" form (role is always 'user', same validators as register.php)
  *   Read  : searchable table of accounts
  *   Update: Edit button -> user_edit.php
- *   Delete: confirmation dialog -> POST delete_user
+ *   Status: Disable / Enable Account (confirmation dialog -> POST disable_user / enable_user).
+ *           Accounts are NEVER deleted here; disabling keeps every record (profile, progress, scores).
  */
 require_once 'includes/auth.php';
 
@@ -60,37 +61,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $open_add_form = true;      // show the form again with the messages
 
-    } elseif ($action === 'delete_user') {
-        // ---------- DELETE (regular players only; progress rows go with them via ON DELETE CASCADE) ----------
+    } elseif ($action === 'disable_user' || $action === 'enable_user') {
+        // ---------- DISABLE / ENABLE (no data is deleted; all safety rules are enforced in set_account_active()) ----------
         $target_id = filter_var(post_string('id'), FILTER_VALIDATE_INT);
         if ($target_id === false || $target_id < 1) {
             set_flash('danger', 'Invalid account.');
-            redirect('users.php');
-        }
-        try {
-            mysqli_begin_transaction($conn);
-            $target = db_select_one($conn, 'SELECT user_id, username, role FROM users WHERE user_id = ? FOR UPDATE', 'i', [$target_id]);
-            if ($target === null) {
-                mysqli_rollback($conn);
-                set_flash('warning', 'That account no longer exists.');
-            } elseif ($target_id === $my_id) {
-                mysqli_rollback($conn);
-                set_flash('danger', 'You cannot delete your own account.');
-            } elseif ($target['role'] !== 'user') {
-                mysqli_rollback($conn);
-                set_flash('danger', 'Administrator accounts cannot be deleted here, so the last administrator can never be removed.');
+        } else {
+            $outcome = set_account_active($conn, $my_id, $target_id, $action === 'enable_user');
+            if ($outcome['ok']) {
+                set_flash('success', $outcome['message']);
             } else {
-                $count = db_select_one($conn, 'SELECT COUNT(*) AS total FROM user_progress WHERE user_id = ?', 'i', [$target_id]);
-                db_execute($conn, "DELETE FROM users WHERE user_id = ? AND role = 'user'", 'i', [$target_id]);
-                mysqli_commit($conn);
-                set_flash('success', 'Player "' . $target['username'] . '" and ' . (int) $count['total'] . ' progress record(s) were deleted.');
+                set_flash('danger', $outcome['error']);
             }
-        } catch (mysqli_sql_exception $ex) {
-            mysqli_rollback($conn);
-            error_log('Gridlock Rescue: delete_user failed: ' . $ex->getMessage());
-            set_flash('danger', 'The account could not be deleted. Please try again.');
         }
-        redirect('users.php');
+        redirect('users.php' . (isset($_GET['q']) && is_string($_GET['q']) && $_GET['q'] !== '' ? '?q=' . urlencode($_GET['q']) : ''));
     } else {
         set_flash('danger', 'Unknown action.');
         redirect('users.php');
@@ -106,7 +90,7 @@ if ($q !== '') {
     $like = '%' . addcslashes($q, '%_\\') . '%';          // % and _ typed by the admin are searched literally
     $users = db_select_all(
         $conn,
-        'SELECT u.user_id, u.username, u.email, u.role, u.created_at,
+        'SELECT u.user_id, u.username, u.email, u.role, u.is_active, u.created_at,
                 (SELECT COUNT(*) FROM user_progress p JOIN levels lv ON lv.level_id = p.level_id
                  WHERE p.user_id = u.user_id AND lv.game_type = \'sliding\') AS levels_done
          FROM users u WHERE u.username LIKE ? OR u.email LIKE ?
@@ -117,13 +101,14 @@ if ($q !== '') {
 } else {
     $users = db_select_all(
         $conn,
-        'SELECT u.user_id, u.username, u.email, u.role, u.created_at,
+        'SELECT u.user_id, u.username, u.email, u.role, u.is_active, u.created_at,
                 (SELECT COUNT(*) FROM user_progress p JOIN levels lv ON lv.level_id = p.level_id
                  WHERE p.user_id = u.user_id AND lv.game_type = \'sliding\') AS levels_done
          FROM users u ORDER BY u.user_id ASC LIMIT 200'
     );
 }
 $total_levels = count_sliding_levels($conn);
+$confirm_action_url = 'users.php' . ($q !== '' ? '?q=' . urlencode($q) : '');   // the confirmation dialog posts here, keeping the search
 
 $active_page = 'users';
 ?>
@@ -208,33 +193,42 @@ $active_page = 'users';
             <div class="table-responsive">
                 <table class="table gr-table align-middle mb-0">
                     <thead>
-                        <tr><th>ID</th><th>Username</th><th class="d-none d-md-table-cell">Email</th><th>Role</th>
+                        <tr><th>ID</th><th>Username</th><th class="d-none d-md-table-cell">Email</th><th>Role</th><th>Status</th>
                             <th class="d-none d-lg-table-cell">Levels</th><th class="d-none d-lg-table-cell">Joined</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
     <?php foreach ($users as $row): ?>
-        <?php $is_player = ($row['role'] === 'user'); ?>
+        <?php $is_player = ($row['role'] === 'user'); $is_active = ((int) $row['is_active'] === 1); $is_me = ((int) $row['user_id'] === $my_id); ?>
                         <tr>
                             <td><?php echo (int) $row['user_id']; ?></td>
                             <td><?php echo e($row['username']); ?><?php echo ((int) $row['user_id'] === $my_id) ? ' <span class="text-muted">(you)</span>' : ''; ?></td>
                             <td class="d-none d-md-table-cell"><?php echo e($row['email']); ?></td>
                             <td><span class="badge <?php echo $is_player ? 'badge-role-player' : 'badge-role-admin'; ?>"><?php echo $is_player ? 'PLAYER' : 'ADMIN'; ?></span></td>
+                            <td><span class="badge <?php echo $is_active ? 'badge-status-active' : 'badge-status-disabled'; ?>"><?php echo $is_active ? 'Active' : 'Disabled'; ?></span></td>
                             <td class="d-none d-lg-table-cell"><?php echo $is_player ? (int) $row['levels_done'] . ' / ' . $total_levels : '&mdash;'; ?></td>
                             <td class="d-none d-lg-table-cell"><?php echo e(substr($row['created_at'], 0, 10)); ?></td>
                             <td>
-        <?php if ($is_player): ?>
                                 <div class="d-flex flex-wrap gap-1">
+        <?php if ($is_player): ?>
                                     <a class="btn btn-outline-navy btn-sm" href="user_edit.php?id=<?php echo (int) $row['user_id']; ?>">Edit</a>
                                     <a class="btn btn-outline-navy btn-sm" href="progress.php?user_id=<?php echo (int) $row['user_id']; ?>">Progress</a>
-                                    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirm-modal"
-                                            data-action="delete_user" data-id="<?php echo (int) $row['user_id']; ?>"
-                                            data-title="Delete <?php echo e($row['username']); ?>?"
-                                            data-message="This permanently deletes the account and its <?php echo (int) $row['levels_done']; ?> saved progress record(s) (the database cascades the delete). This cannot be undone."
-                                            data-button="Delete account">Delete</button>
-                                </div>
-        <?php else: ?>
-                                <span class="text-muted small">Protected</span>
         <?php endif; ?>
+        <?php if ($is_me): ?>
+                                    <span class="text-muted small align-self-center">Your account</span>
+        <?php elseif ($is_active): ?>
+                                    <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#confirm-modal"
+                                            data-action="disable_user" data-id="<?php echo (int) $row['user_id']; ?>"
+                                            data-title="Disable <?php echo e($row['username']); ?>?"
+                                            data-message="<?php echo e($row['username']); ?> will be logged out on their next request and cannot log in until you enable the account again. Nothing is deleted: profile, progress and scores are kept."
+                                            data-button="Disable account" data-button-class="btn-danger">Disable Account</button>
+        <?php else: ?>
+                                    <button type="button" class="btn btn-outline-navy btn-sm" data-bs-toggle="modal" data-bs-target="#confirm-modal"
+                                            data-action="enable_user" data-id="<?php echo (int) $row['user_id']; ?>"
+                                            data-title="Enable <?php echo e($row['username']); ?>?"
+                                            data-message="<?php echo e($row['username']); ?> will be able to log in again and will keep all previous progress and scores."
+                                            data-button="Enable account" data-button-class="btn-primary">Enable Account</button>
+        <?php endif; ?>
+                                </div>
                             </td>
                         </tr>
     <?php endforeach; ?>
@@ -242,7 +236,7 @@ $active_page = 'users';
                 </table>
             </div>
 <?php endif; ?>
-            <p class="text-muted small mt-3 mb-0">Administrator accounts cannot be edited or deleted here. Administrators change their own details on the Profile page.</p>
+            <p class="text-muted small mt-3 mb-0">Accounts are never deleted: disabling keeps all data and can be undone. You cannot disable your own account or the last active administrator. Administrators change their own details on the Profile page.</p>
         </section>
     </main>
 

@@ -20,15 +20,10 @@
   --bs-link-color: #2f63c8;
 }
 
-html {
-  scroll-padding-top: 66px;
-}
-
 body {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  padding-top: 66px;
 }
 h1,
 h2,
@@ -42,21 +37,11 @@ h3,
 }
 
 /* ---------- navbar ---------- */
-
-#main-nav {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  z-index: 1030;
-}
-
 .navbar-gr {
   background: var(--gr-navy);
   padding-top: 0.65rem;
   padding-bottom: 0.65rem;
 }
-
 .navbar-gr .navbar-brand {
   color: #fff;
   font-size: 1.15rem;
@@ -251,10 +236,6 @@ button:focus-visible {
 }
 
 /* ---------- login / register ---------- */
-
-html #auth-header {
-  padding-top: 0;
-}
 .auth-topbar {
   background: var(--gr-navy);
   padding: 0.8rem 0;
@@ -906,4 +887,14 @@ html #auth-header {
   .sl-mini-exit {
     display: none;
   }
+}
+
+/* account status badges (users.php) */
+.badge-status-active {
+  background: #e3f6f3;
+  color: #0e7567;
+}
+.badge-status-disabled {
+  background: #fdece8;
+  color: #9b2c12;
 }
