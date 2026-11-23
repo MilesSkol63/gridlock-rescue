@@ -2,7 +2,7 @@
 /**
  * includes/functions.php  (NEW)
  * Small shared helpers: escaping, redirects, flash messages, validation,
- * MySQLi query helpers and level/progress helpers.
+ * PDO PostgreSQL query helpers and level/progress helpers.
  */
 if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === basename(__FILE__)) {
     http_response_code(403);
@@ -102,47 +102,91 @@ function validate_password($password)
     return '';
 }
 
-/* ------------------------------------------------------------ MySQLi helpers */
-// Thin wrappers around the procedural MySQLi functions so pages stay short.
-// $types is the bind_param type string, e.g. 'si' = string, integer.
-
-function db_run($conn, $sql, $types = '', $params = [])
+/* ------------------------------------------------------------ PDO helpers */
+// Original wrapper signatures retained to keep application behavior stable.
+// Types: i (integer), s (string), b (PostgreSQL boolean). Emulated parameters
+// are REQUIRED for the Supabase shared TRANSACTION pooler: never concatenate input.
+function db_run(PDO $conn, string $sql, string $types = '', array $params = []): PDOStatement
 {
-    $stmt = mysqli_prepare($conn, $sql);
-    if ($types !== '') {
-        mysqli_stmt_bind_param($stmt, $types, ...$params);
+    if (strlen($types) !== count($params)) {
+        throw new InvalidArgumentException('Parameter type count mismatch');
     }
-    mysqli_stmt_execute($stmt);
+    $stmt = $conn->prepare($sql);
+    foreach ($params as $index => $value) {
+        $type = $types[$index] ?? 's';
+        if ($value === null) {
+            $pdoType = PDO::PARAM_NULL;
+        } elseif ($type === 'i') {
+            $pdoType = PDO::PARAM_INT;
+            $value = (int) $value;
+        } elseif ($type === 'b') {
+            // Explicit PostgreSQL boolean text + cast avoids PDO/PgSQL bool
+            // emulation differences (e.g. unquoted 0/1 vs boolean literals).
+            $pdoType = PDO::PARAM_STR;
+            $value = $value ? 'true' : 'false';
+        } elseif ($type === 's') {
+            $pdoType = PDO::PARAM_STR;
+        } else {
+            throw new InvalidArgumentException('Unexpected bind type');
+        }
+        $stmt->bindValue($index + 1, $value, $pdoType);
+    }
+    $stmt->execute();
     return $stmt;
 }
 
-/** SELECT many rows -> array of associative arrays. */
-function db_select_all($conn, $sql, $types = '', $params = [])
+/** PDO_pgsql can return booleans as true/false, t/f, or 1/0. Normalize explicitly. */
+function pg_bool($value): bool
+{
+    if (is_bool($value)) return $value;
+    if ($value === 1 || $value === '1' || $value === 't' || $value === 'true') return true;
+    if ($value === 0 || $value === '0' || $value === 'f' || $value === 'false') return false;
+    throw new UnexpectedValueException('Invalid PostgreSQL boolean value');
+}
+
+function db_select_all(PDO $conn, string $sql, string $types = '', array $params = []): array
 {
     $stmt = db_run($conn, $sql, $types, $params);
-    $result = mysqli_stmt_get_result($stmt);
-    $rows = mysqli_fetch_all($result, MYSQLI_ASSOC);
-    mysqli_stmt_close($stmt);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $stmt->closeCursor();
+    foreach ($rows as &$row) {
+        // Preserve the existing view and controller expectations for account status.
+        if (array_key_exists('is_active', $row)) {
+            $row['is_active'] = pg_bool($row['is_active']) ? 1 : 0;
+        }
+    }
+    unset($row);
     return $rows;
 }
 
-/** SELECT one row -> associative array, or null when nothing matches. */
-function db_select_one($conn, $sql, $types = '', $params = [])
+function db_select_one(PDO $conn, string $sql, string $types = '', array $params = []): ?array
 {
     $rows = db_select_all($conn, $sql, $types, $params);
     return $rows[0] ?? null;
 }
 
-/** INSERT / UPDATE / DELETE -> ['affected' => rows, 'insert_id' => id]. */
-function db_execute($conn, $sql, $types = '', $params = [])
+/** PostgreSQL RETURNING supplies inserted IDs without MySQL's last_insert_id. */
+function db_execute(PDO $conn, string $sql, string $types = '', array $params = []): array
 {
     $stmt = db_run($conn, $sql, $types, $params);
-    $info = [
-        'affected'  => mysqli_stmt_affected_rows($stmt),
-        'insert_id' => mysqli_insert_id($conn),
-    ];
-    mysqli_stmt_close($stmt);
-    return $info;
+    $id = null;
+    if (preg_match('/\bRETURNING\s+([a-z_]+)\b/i', $sql)) {
+        $row = $stmt->fetch(PDO::FETCH_NUM);
+        $id = $row === false ? null : (int) $row[0];
+    }
+    $affected = $stmt->rowCount();
+    $stmt->closeCursor();
+    return ['affected' => $affected, 'insert_id' => $id];
+}
+
+function db_rollback_if_active(PDO $conn): void
+{
+    if ($conn->inTransaction()) $conn->rollBack();
+}
+
+function is_unique_violation(PDOException $ex): bool
+{
+    return $ex->getCode() === '23505';
 }
 
 /**
@@ -187,7 +231,7 @@ function set_account_active($conn, $actor_id, $target_id, $make_active)
     $result = ['ok' => false, 'error' => '', 'message' => ''];
 
     try {
-        mysqli_begin_transaction($conn);
+        $conn->beginTransaction();
 
         // lock all administrator rows in a fixed order, then the target row
         $admins = db_select_all($conn, 'SELECT user_id, is_active FROM users WHERE role = \'admin\' ORDER BY user_id FOR UPDATE');
@@ -219,21 +263,21 @@ function set_account_active($conn, $actor_id, $target_id, $make_active)
         }
 
         if ($result['error'] !== '') {
-            mysqli_rollback($conn);
+            db_rollback_if_active($conn);
             return $result;
         }
 
-        db_execute($conn, 'UPDATE users SET is_active = ? WHERE user_id = ?', 'ii', [$make_active ? 1 : 0, $target_id]);
-        mysqli_commit($conn);
+        db_execute($conn, 'UPDATE users SET is_active = ?::boolean WHERE user_id = ?', 'bi', [$make_active, $target_id]);
+        $conn->commit();
 
         $result['ok'] = true;
         $result['message'] = $make_active
             ? 'Account "' . $target['username'] . '" was enabled. The player can log in again and keeps all saved progress.'
             : 'Account "' . $target['username'] . '" was disabled. It can no longer log in or use the site, and all data and progress are preserved.';
         return $result;
-    } catch (mysqli_sql_exception $ex) {
-        mysqli_rollback($conn);
-        error_log('Gridlock Rescue: set_account_active failed: ' . $ex->getMessage());
+    } catch (PDOException $ex) {
+        db_rollback_if_active($conn);
+        error_log('Gridlock Rescue: set_account_active failed: ' . ('SQLSTATE ' . $ex->getCode()));
         $result['ok'] = false;
         $result['error'] = 'The account status could not be changed. Please try again.';
         return $result;
@@ -390,7 +434,7 @@ function check_account_duplicates($conn, $username, $email, $exclude_user_id = 0
     $errors = [];
     $rows = db_select_all(
         $conn,
-        'SELECT username, email FROM users WHERE (username = ? OR email = ?) AND user_id <> ?',
+        'SELECT username, email FROM users WHERE (lower(username) = lower(?) OR lower(email) = lower(?)) AND user_id <> ?',
         'ssi',
         [$username, $email, (int) $exclude_user_id]
     );

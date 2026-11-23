@@ -1,7 +1,7 @@
 /**
  * tests/account_status_logic.test.js - LOGIC SIMULATION of set_account_active() and of the login / session checks,
- * run on an in-memory SQLite database (node:sqlite, Node 22.5+). It mirrors the PHP rules; it is NOT MySQL and NOT the PHP code.
- * The real checks are tests/php/account_status_test.php (needs PHP + a MySQL test database).   node tests/account_status_logic.test.js
+ * run on an in-memory SQLite database (node:sqlite, Node 22.5+). It mirrors the PHP rules; it is NOT PostgreSQL and NOT the PHP code.
+ * The real checks are tests/php/account_status_test.php (needs PHP + a PostgreSQL test database).   node tests/account_status_logic.test.js
  */
 let DatabaseSync;
 try { ({ DatabaseSync } = require('node:sqlite')); } catch (e) { console.log('SKIPPED: node:sqlite is not available in this Node version'); process.exit(0); }

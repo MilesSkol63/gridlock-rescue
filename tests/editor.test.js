@@ -1,6 +1,6 @@
 /** tests/editor.test.js - the level editor's model (assets/js/level-editor.js, EditorCore).   node tests/editor.test.js */
-const E = require('../assets/js/sliding-engine.js');
-const Ed = require('../assets/js/level-editor.js');
+const E = require('../public/assets/js/sliding-engine.js');
+const Ed = require('../public/assets/js/level-editor.js');
 const LEVELS = require('./fixtures/sliding_levels.json');
 let passed = 0, failed = 0;
 const check = (n, ok, d) => { if (ok) passed++; else { failed++; console.log('FAIL: ' + n + (d ? ' -> ' + d : '')); } };

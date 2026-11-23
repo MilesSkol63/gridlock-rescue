@@ -5,9 +5,9 @@
  *   regular user : may open completed and unlocked levels; results are saved
  *   administrator: may preview ANY level; nothing is saved
  */
-require_once 'includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-/** @var mysqli $conn */
+/** @var PDO $conn */
 
 $account  = require_login();
 $is_admin = ($account['role'] === 'admin');
@@ -73,7 +73,7 @@ $active_page = 'levels';
     <link href="assets/css/style.css" rel="stylesheet">
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
+    <?php include __DIR__ . '/../includes/navbar.php'; ?>
 
     <main class="container page-main" id="page-content">
         <?php show_flash(); ?>

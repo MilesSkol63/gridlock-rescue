@@ -1,6 +1,7 @@
 # secrets and local configuration - never commit
 .env
 .env.*
+!.env.example
 includes/config.local.php
 # OS / editor / build files
 .DS_Store

@@ -1,0 +1,5 @@
+<?php
+/** Liveness only; intentionally no database requirement. */
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store');
+echo json_encode(['status' => 'ok', 'component' => 'php']);

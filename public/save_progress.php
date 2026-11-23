@@ -7,9 +7,9 @@
  *
  * The user is taken ONLY from the PHP session. The browser never sends a user id or a role.
  */
-require_once 'includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-/** @var mysqli $conn */
+/** @var PDO $conn */
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
@@ -63,7 +63,7 @@ if (count($slides) < 1 || count($slides) > 500) {
 // Both this endpoint and the admin level editor lock the level row first. This prevents a
 // completion based on an old board from being saved while that board is being replaced.
 try {
-    mysqli_begin_transaction($conn);
+    $conn->beginTransaction();
 
     $level = db_select_one(
         $conn,
@@ -74,19 +74,19 @@ try {
     );
 
     if ($level === null) {
-        mysqli_rollback($conn);
+        db_rollback_if_active($conn);
         json_reply(404, false, 'That level does not exist.');
     }
 
     $level_rows = sliding_rows_from_text($level['layout']);
     $current_layout_hash = sliding_layout_fingerprint($level['layout']);
     if (!hash_equals($current_layout_hash, $submitted_layout_hash)) {
-        mysqli_rollback($conn);
+        db_rollback_if_active($conn);
         json_reply(409, false, 'This level was changed after you opened it. Reload the level before playing again.');
     }
 
     if (!is_level_unlocked($conn, $user_id, $level_id)) {
-        mysqli_rollback($conn);
+        db_rollback_if_active($conn);
         json_reply(403, false, 'That level is locked.');
     }
 
@@ -94,7 +94,7 @@ try {
     // of slides counted here; a number sent by the browser is never accepted.
     $replay = sliding_replay($level_rows, $slides);
     if (!$replay['ok']) {
-        mysqli_rollback($conn);
+        db_rollback_if_active($conn);
         json_reply(422, false, 'The submitted game is not a valid solution of this level.');
     }
     $moves = (int) $replay['moves'];
@@ -137,10 +137,10 @@ try {
     $best_moves = (int) $saved['best_moves'];
     $next_level_id = get_next_level_id($conn, $level_id);
 
-    mysqli_commit($conn);
-} catch (mysqli_sql_exception $ex) {
-    mysqli_rollback($conn);
-    error_log('Gridlock Rescue: save_progress failed: ' . $ex->getMessage());
+    $conn->commit();
+} catch (PDOException $ex) {
+    db_rollback_if_active($conn);
+    error_log('Gridlock Rescue: save_progress failed: ' . ('SQLSTATE ' . $ex->getCode()));
     json_reply(500, false, 'Could not save your progress. Please try again.');
 }
 

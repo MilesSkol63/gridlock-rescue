@@ -3,9 +3,9 @@
  * user_edit.php  (NEW)  - ADMINISTRATOR-ONLY: edit a REGULAR player's username, email and (optionally) password.
  * The role can never be changed here and administrator accounts cannot be opened.
  */
-require_once 'includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-/** @var mysqli $conn */
+/** @var PDO $conn */
 
 $account = require_admin();
 
@@ -61,9 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             set_flash('success', 'Player "' . $username . '" was updated.');
             redirect('users.php');
-        } catch (mysqli_sql_exception $ex) {
-            error_log('Gridlock Rescue: user_edit failed: ' . $ex->getMessage());
-            $errors['form'] = ($ex->getCode() === 1062)
+        } catch (PDOException $ex) {
+            error_log('Gridlock Rescue: user_edit failed: ' . ('SQLSTATE ' . $ex->getCode()));
+            $errors['form'] = is_unique_violation($ex)
                 ? 'That username or email is already registered.'
                 : 'The account could not be updated. Please try again.';
         }
@@ -86,7 +86,7 @@ $active_page = 'users';
     <link href="assets/css/style.css" rel="stylesheet">
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
+    <?php include __DIR__ . '/../includes/navbar.php'; ?>
 
     <main class="container page-main" id="page-content">
         <?php show_flash(); ?>

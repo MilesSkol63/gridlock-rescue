@@ -1,9 +1,11 @@
 {
-    "name": "gridlock-rescue/app",
-    "description": "Gridlock Rescue - PHP/MySQL puzzle game (college endterm project)",
-    "type": "project",
-    "require": {
-        "php": ">=8.2",
-        "ext-mysqli": "*"
-    }
+  "name": "gridlock-rescue/supabase-vercel",
+  "description": "Gridlock Rescue - PHP 8.4 PDO PostgreSQL with FrankenPHP",
+  "type": "project",
+  "require": {
+    "php": "^8.4",
+    "ext-pdo": "*",
+    "ext-pdo_pgsql": "*",
+    "ext-mbstring": "*"
+  }
 }

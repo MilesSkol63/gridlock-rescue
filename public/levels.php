@@ -5,9 +5,9 @@
  *   administrator: Test Play, Edit and Delete on every level, "+ New Level" button
  * Delete is a POST action (CSRF + confirmation dialog); user_progress rows go with the level (ON DELETE CASCADE).
  */
-require_once 'includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-/** @var mysqli $conn */
+/** @var PDO $conn */
 
 $account  = require_login();
 $is_admin = ($account['role'] === 'admin');
@@ -23,20 +23,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('levels.php');
         }
         try {
-            mysqli_begin_transaction($conn);
+            $conn->beginTransaction();
             $target = db_select_one($conn, 'SELECT level_id, title FROM levels WHERE level_id = ? AND game_type = \'sliding\' FOR UPDATE', 'i', [$level_id]);
             if ($target === null) {
-                mysqli_rollback($conn);
+                db_rollback_if_active($conn);
                 set_flash('warning', 'That level no longer exists.');
             } else {
                 $count = db_select_one($conn, 'SELECT COUNT(*) AS total FROM user_progress WHERE level_id = ?', 'i', [$level_id]);
                 db_execute($conn, 'DELETE FROM levels WHERE level_id = ? AND game_type = \'sliding\'', 'i', [$level_id]);
-                mysqli_commit($conn);
+                $conn->commit();
                 set_flash('success', 'Level "' . $target['title'] . '" and ' . (int) $count['total'] . ' saved score(s) were deleted.');
             }
-        } catch (mysqli_sql_exception $ex) {
-            mysqli_rollback($conn);
-            error_log('Gridlock Rescue: delete_level failed: ' . $ex->getMessage());
+        } catch (PDOException $ex) {
+            db_rollback_if_active($conn);
+            error_log('Gridlock Rescue: delete_level failed: ' . ('SQLSTATE ' . $ex->getCode()));
             set_flash('danger', 'The level could not be deleted. Please try again.');
         }
     } else {
@@ -74,7 +74,7 @@ $active_page = 'levels';
     <link href="assets/css/style.css" rel="stylesheet">
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
+    <?php include __DIR__ . '/../includes/navbar.php'; ?>
 
     <main class="container page-main" id="page-content">
         <?php show_flash(); ?>
@@ -152,7 +152,7 @@ $active_page = 'levels';
 <?php endif; ?>
     </main>
 
-    <?php include 'includes/confirm_modal.php'; ?>
+    <?php include __DIR__ . '/../includes/confirm_modal.php'; ?>
 
     <footer class="site-footer">Gridlock Rescue - Endterm Project</footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

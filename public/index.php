@@ -3,9 +3,9 @@
  * index.php  (NEW)  - LOGIN PAGE and landing page of the application.
  * Accepts username OR email + password. Logged-in users are sent to the dashboard.
  */
-require_once 'includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-/** @var mysqli $conn */
+/** @var PDO $conn */
 
 redirect_if_logged_in();   // instructor rule: an active session cannot reopen the login page
 
@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Prepared statement: the user input is never glued into the SQL text.
         $account = db_select_one(
             $conn,
-            'SELECT user_id, username, password_hash, role, is_active FROM users WHERE username = ? OR email = ? LIMIT 1',
+            'SELECT user_id, username, password_hash, role, is_active FROM users WHERE lower(username) = lower(?) OR lower(email) = lower(?) LIMIT 1',
             'ss',
             [$identifier, $identifier]
         );

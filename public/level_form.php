@@ -7,9 +7,9 @@
  * "layout". Here the server parses that text again, checks the geometry, SOLVES the puzzle with the PHP solver
  * (includes/sliding.php) and only then saves. The optimal number of moves is calculated, never trusted.
  */
-require_once 'includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-/** @var mysqli $conn */
+/** @var PDO $conn */
 
 $account = require_admin();
 
@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($errors['title'])) {
         $same = db_select_one(
             $conn,
-            "SELECT level_id FROM levels WHERE title = ? AND game_type = 'sliding' AND level_id <> ?",
+            "SELECT level_id FROM levels WHERE lower(title) = lower(?) AND game_type = 'sliding' AND level_id <> ?",
             'si',
             [$form['title'], (int) $editing_id]
         );
@@ -119,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $hint_value = ($form['hint'] === '') ? null : $form['hint'];
 
         try {
-            mysqli_begin_transaction($conn);
+            $conn->beginTransaction();
             if ($existing === null) {
                 db_execute(
                     $conn,
@@ -129,7 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     [$form['title'], $hint_value, $form['difficulty'], $order, $analysis['layout'], $par]
                 );
                 $message = 'Level "' . $form['title'] . '" was created (optimal solution: ' . $optimal_found . ' moves).';
-                mysqli_commit($conn);
+                $conn->commit();
                 set_flash('success', $message);
                 redirect('levels.php');
             } else {
@@ -144,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
 
                 if ($locked_level === null) {
-                    mysqli_rollback($conn);
+                    db_rollback_if_active($conn);
                     $errors['form'] = 'This level no longer exists. Return to the level list and try again.';
                 } else {
                     // Lock the matching progress rows too. New score inserts must
@@ -161,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $layout_changed = ($analysis['layout'] !== $current_layout);
 
                     if (sliding_layout_edit_requires_progress_confirmation($layout_changed, $progress_count, $reset_progress)) {
-                        mysqli_rollback($conn);
+                        db_rollback_if_active($conn);
                         $errors['progress_confirmation'] = 'The board layout has changed and this level has ' . $progress_count . ' saved score(s). Confirm that these scores should be cleared before saving the new board.';
                     } else {
                         db_execute(
@@ -179,16 +179,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $message .= ' ' . (int) $deleted['affected'] . ' saved score(s) for this level were cleared.';
                         }
 
-                        mysqli_commit($conn);
+                        $conn->commit();
                         set_flash('success', $message);
                         redirect('levels.php');
                     }
                 }
             }
-        } catch (mysqli_sql_exception $ex) {
+        } catch (PDOException $ex) {
             // A rollback is safe here because the transaction was started above.
-            mysqli_rollback($conn);
-            error_log('Gridlock Rescue: level save failed: ' . $ex->getMessage());
+            db_rollback_if_active($conn);
+            error_log('Gridlock Rescue: level save failed: ' . ('SQLSTATE ' . $ex->getCode()));
             $errors['form'] = 'The level could not be saved. Please try again.';
         }
     }
@@ -211,7 +211,7 @@ $page_title = ($existing !== null) ? 'Edit Level' : 'Create Level';
     <link href="assets/css/style.css" rel="stylesheet">
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
+    <?php include __DIR__ . '/../includes/navbar.php'; ?>
 
     <main class="container page-main" id="page-content">
         <?php show_flash(); ?>

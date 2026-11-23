@@ -6,7 +6,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const LEVELS = require('./fixtures/sliding_levels.json');
-require('../assets/js/sliding-engine.js');
+require('../public/assets/js/sliding-engine.js');
 const E = global.GridlockEngine;
 let passed = 0, failed = 0;
 const check = (n, ok, d) => { if (ok) passed++; else { failed++; console.log('FAIL: ' + n + (d ? ' -> ' + d : '')); } };
@@ -48,8 +48,8 @@ function loadPage(level, overrides) {
         if (plan.reject) return Promise.reject(new Error('offline'));
         return Promise.resolve({ ok: plan.ok, status: plan.status, json: () => Promise.resolve(plan.json) });
     };
-    delete require.cache[require.resolve('../assets/js/game.js')];
-    require('../assets/js/game.js');
+    delete require.cache[require.resolve('../public/assets/js/game.js')];
+    require('../public/assets/js/game.js');
     const key = (k, extra) => (docListeners.keydown || []).forEach(f => f(Object.assign({ key: k, preventDefault() {}, target: {} }, extra)));
     const veh = id => byId['game-board'].children.find(c => c.dataset.id === id);
     return { byId, calls, key, veh, moves: () => Number(byId['move-count'].textContent), data };

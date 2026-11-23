@@ -5,9 +5,9 @@
  *   administrator: all records (optionally ?user_id=ID); delete one record or reset one player
  * Deleting progress never deletes an account. Unlocking is recalculated from the remaining rows.
  */
-require_once 'includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-/** @var mysqli $conn */
+/** @var PDO $conn */
 
 $account  = require_login();
 $is_admin = ($account['role'] === 'admin');
@@ -84,7 +84,7 @@ $active_page = 'progress';
     <link href="assets/css/style.css" rel="stylesheet">
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
+    <?php include __DIR__ . '/../includes/navbar.php'; ?>
 
     <main class="container page-main" id="page-content">
         <?php show_flash(); ?>
@@ -198,7 +198,7 @@ $active_page = 'progress';
 <?php endif; ?>
     </main>
 
-    <?php include 'includes/confirm_modal.php'; ?>
+    <?php include __DIR__ . '/../includes/confirm_modal.php'; ?>
 
     <footer class="site-footer">Gridlock Rescue - Endterm Project</footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

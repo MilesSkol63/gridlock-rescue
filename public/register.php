@@ -3,10 +3,10 @@
  * register.php  (NEW)  - public registration for REGULAR USERS only.
  * The role is written by the server ('user' inside the SQL) and is never read from the form.
  */
-require_once 'includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 
-/** @var mysqli $conn */
+/** @var PDO $conn */
 
 redirect_if_logged_in();   // authenticated users cannot open the registration page
 
@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($errors['username']) && !isset($errors['email'])) {
         $existing = db_select_all(
             $conn,
-            'SELECT username, email FROM users WHERE username = ? OR email = ?',
+            'SELECT username, email FROM users WHERE lower(username) = lower(?) OR lower(email) = lower(?)',
             'ss',
             [$username, $email]
         );
@@ -67,11 +67,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
             set_flash('success', 'Account created. Please log in.');
             redirect('index.php');
-        } catch (mysqli_sql_exception $ex) {
-            if ($ex->getCode() === 1062) {          // duplicate key: someone registered at the same moment
+        } catch (PDOException $ex) {
+            if (is_unique_violation($ex)) {          // duplicate key: someone registered at the same moment
                 $errors['form'] = 'That username or email is already registered.';
             } else {
-                error_log('Gridlock Rescue: registration failed: ' . $ex->getMessage());
+                error_log('Gridlock Rescue: registration failed: ' . ('SQLSTATE ' . $ex->getCode()));
                 $errors['form'] = 'Sorry, the account could not be created. Please try again.';
             }
         }

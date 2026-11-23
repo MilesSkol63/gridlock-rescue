@@ -3,9 +3,9 @@
  * dashboard.php  (NEW)  - the ONE dashboard for both roles.
  * The session role decides which queries run and which sections are printed.
  */
-require_once 'includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-/** @var mysqli $conn */
+/** @var PDO $conn */
 
 $account  = require_login();
 $is_admin = ($account['role'] === 'admin');
@@ -85,7 +85,7 @@ $active_page = 'dashboard';
     <link href="assets/css/style.css" rel="stylesheet">
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
+    <?php include __DIR__ . '/../includes/navbar.php'; ?>
 
     <main class="container page-main" id="page-content">
         <?php show_flash(); ?>

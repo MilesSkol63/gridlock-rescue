@@ -2,8 +2,8 @@
 /**
  * setup_admin.php  (NEW)  - ONE-TIME, COMMAND-LINE-ONLY creation of the first administrator.
  *
- * Interactive:      php setup_admin.php
- * Non-interactive:  set ADMIN_USERNAME, ADMIN_EMAIL and ADMIN_PASSWORD, then run  php setup_admin.php
+ * Interactive:      php tools/setup_admin.php
+ * Non-interactive:  set ADMIN_USERNAME, ADMIN_EMAIL and ADMIN_PASSWORD, then run  php tools/setup_admin.php
  *
  * It refuses to run in a browser and refuses to run when an administrator already exists.
  * No password is stored in any file: it is typed (or read from the environment), hashed with
@@ -14,9 +14,9 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
-require_once __DIR__ . '/includes/config.php';
-require_once __DIR__ . '/includes/db.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/functions.php';
 
 /** Ask a question in the terminal. $hidden = do not echo what is typed (Linux/macOS). */
 function ask($question, $hidden = false)
@@ -67,7 +67,7 @@ foreach ([validate_username($username), validate_email($email), validate_passwor
     }
 }
 
-$taken = db_select_one($conn, 'SELECT user_id FROM users WHERE username = ? OR email = ?', 'ss', [$username, $email]);
+$taken = db_select_one($conn, 'SELECT user_id FROM users WHERE lower(username) = lower(?) OR lower(email) = lower(?)', 'ss', [$username, $email]);
 if ($taken !== null) {
     stop('That username or email is already used by another account.');
 }
@@ -82,5 +82,5 @@ db_execute(
 
 echo "Administrator '" . $username . "' created. You can now log in at the login page." . PHP_EOL;
 if (env_value('ADMIN_PASSWORD') !== '') {
-    echo "Remove the ADMIN_PASSWORD variable now (Railway: service > Variables)." . PHP_EOL;
+    echo "Unset ADMIN_PASSWORD after setup." . PHP_EOL;
 }

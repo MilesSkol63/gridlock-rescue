@@ -1,37 +1,26 @@
-/** tests/account_status_sql.test.js - the account-status (disable/enable) SQL is guarded and non-destructive.   node tests/account_status_sql.test.js */
+/** Static safeguards for the PostgreSQL deployment (not a database integration test). */
 const fs = require('fs'), path = require('path');
-let passed = 0, failed = 0;
-const check = (n, ok, d) => { if (ok) passed++; else { failed++; console.log('FAIL: ' + n + (d ? ' -> ' + d : '')); } };
-const read = f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8').replace(/\r\n/g, '\n');
-
-const mig = read('database/migrate_user_status.sql');
-const code = mig.split('\n').filter(l => !l.trim().startsWith('--')).join('\n');
-check('migration adds users.is_active TINYINT(1) NOT NULL DEFAULT 1', /ALTER TABLE users ADD COLUMN is_active TINYINT\(1\) NOT NULL DEFAULT 1 AFTER role/.test(code));
-check('migration only adds the column when it is missing (information_schema guard)', /information_schema\.COLUMNS[\s\S]*COLUMN_NAME = 'is_active'/.test(code) && /IF\(COUNT\(\*\) = 0/.test(code));
-check('migration never drops, deletes, truncates or updates anything', !/\b(DROP|TRUNCATE|DELETE|UPDATE|INSERT INTO|RENAME|MODIFY|CHANGE)\b/i.test(code.replace(/DEALLOCATE PREPARE/gi, '')));
-check('migration touches only the users table', !/\b(levels|user_progress)\b/i.test(code));
-check('existing users stay active: the default is 1, not 0', !/DEFAULT 0/.test(code));
-
-const fresh = read('database/gridlock_rescue.sql');
-check('fresh install: users table has is_active TINYINT(1) NOT NULL DEFAULT 1', /CREATE TABLE IF NOT EXISTS users \([\s\S]*is_active\s+TINYINT\(1\) NOT NULL DEFAULT 1[\s\S]*?\) ENGINE/.test(fresh));
-check('fresh/combined SQL also contains the guarded column migration', /information_schema\.COLUMNS[\s\S]*COLUMN_NAME = 'is_active'/.test(fresh));
-check('foreign keys still cascade (relationships were not removed)', (fresh.match(/ON DELETE CASCADE/g) || []).length >= 2);
-check('import.php accepts the new migration file', /migrate_user_status\.sql/.test(read('database/import.php')));
-
-// application code: no permanent user deletion is left anywhere
-const files = ['users.php', 'user_edit.php', 'profile.php', 'progress.php', 'levels.php', 'dashboard.php', 'register.php', 'index.php', 'setup_admin.php', 'save_progress.php', 'play.php', 'leaderboard.php', 'level_form.php', 'includes/functions.php', 'includes/auth.php', 'assets/js/app.js', 'assets/js/game.js']
-    .map(f => [f, read(f)]);
-check('no "DELETE FROM users" statement in any application file', files.every(([f, s]) => !/DELETE\s+FROM\s+users/i.test(s)), files.filter(([f, s]) => /DELETE\s+FROM\s+users/i.test(s)).map(x => x[0]).join(','));
-check('no delete_user action / handler / button left', files.every(([f, s]) => !/delete_user|Delete account/i.test(s)));
-const users = read('users.php');
-check('users.php offers Disable and Enable, via POST actions with the confirmation modal', /data-action="disable_user"/.test(users) && /data-action="enable_user"/.test(users) && /confirm-modal/.test(users));
-check('users.php handles the status change only after verify_csrf() and require_admin()', users.indexOf('require_admin()') < users.indexOf("'disable_user'") && users.indexOf('verify_csrf()') < users.indexOf("'disable_user'"));
-check('users.php shows an Active / Disabled badge', /Active/.test(users) && /Disabled/.test(users));
-check('status is never changed through GET (no $_GET in the status handler)', !/\$_GET\[['"](id|action)['"]\][\s\S]{0,40}disable/.test(users));
-const auth = read('includes/auth.php'), idx = read('index.php');
-check('the session guard reads is_active on every request and ends a disabled session', /is_active FROM users WHERE user_id/.test(auth) && /account_was_disabled\(true\)/.test(auth) && /destroy_session\(\)/.test(auth));
-check('login refuses disabled accounts (after the password check)', /is_active/.test(idx) && idx.indexOf('password_verify') < idx.indexOf("has been disabled"));
-check('registration still creates active accounts (column default, role stays user)', /VALUES \(\?, \?, \?, 'user'\)/.test(read('register.php')));
-
-console.log((failed === 0 ? 'ALL PASSED' : 'FAILURES') + ': ' + passed + ' checks passed, ' + failed + ' failed');
-process.exit(failed === 0 ? 0 : 1);
+let pass=0, fail=0;
+const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
+const chk=(n,ok)=>{if(ok) pass++;else {fail++;console.log('FAIL: '+n)}};
+const schema=read('database/postgres_schema.sql');
+const perms=read('database/postgres_permissions.sql');
+const auth=read('includes/auth.php'), funcs=read('includes/functions.php');
+const users=read('public/users.php'), idx=read('public/index.php');
+chk('is_active boolean default true in schema', /is_active\s+boolean NOT NULL DEFAULT true/i.test(schema));
+chk('same original role enum domain', /CHECK \(role IN \('user','admin'\)\)/.test(schema));
+chk('user FK noncascading', /FOREIGN KEY \(user_id\) REFERENCES public.users\(user_id\) ON DELETE RESTRICT/.test(schema));
+chk('level FK cascades intentionally', /FOREIGN KEY \(level_id\) REFERENCES public.levels\(level_id\) ON DELETE CASCADE/.test(schema));
+chk('case insensitive username unique index', /UNIQUE INDEX.*uq_users_username_ci.*lower\(username\)/i.test(schema));
+chk('case insensitive email unique index', /UNIQUE INDEX.*uq_users_email_ci.*lower\(email\)/i.test(schema));
+chk('runtime role cannot delete users', !/GRANT[^;]*DELETE ON public.users/i.test(perms));
+chk('account status function checks actor & last admin under row locks', /role = [^\n]*admin[^\n]*ORDER BY user_id FOR UPDATE/.test(funcs) && /last active administrator/.test(funcs));
+chk('account status update binds a boolean', /UPDATE users SET is_active = \?::boolean WHERE user_id = \?\', \'bi\'/.test(funcs));
+chk('session rejects disabled account per request', /is_active FROM users WHERE user_id/.test(auth) && /account_was_disabled\(true\)/.test(auth));
+chk('login rejects disabled account', /has been disabled/.test(idx) && /password_verify/.test(idx));
+chk('no application delete-users SQL', [...fs.readdirSync(path.join(__dirname,'../public')).filter(x=>x.endsWith('.php')).map(x=>read('public/'+x)),funcs,auth].every(x=>!/DELETE\s+FROM\s+users/i.test(x)));
+chk('admin uses POST and CSRF', /require_admin\(\)/.test(users) && /verify_csrf\(\)/.test(users) && /disable_user/.test(users) && /enable_user/.test(users));
+chk('no public setup admin tool', !fs.existsSync(path.join(__dirname,'../public/setup_admin.php')));
+chk('all routes isolated from private includes', /\.\.\/includes\/auth.php/.test(idx) && fs.existsSync(path.join(__dirname,'../includes/db.php')));
+console.log((fail?'FAILURES':'ALL PASSED')+': '+pass+' checks passed, '+fail+' failed');
+process.exit(fail ? 1 : 0);

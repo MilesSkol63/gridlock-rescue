@@ -15,6 +15,7 @@ if (basename($_SERVER['SCRIPT_FILENAME'] ?? '') === basename(__FILE__)) {
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/session_pg.php';
 
 /** True when the visitor reached us over HTTPS (Railway's proxy sends X-Forwarded-Proto). */
 function request_is_https()
@@ -34,11 +35,14 @@ function start_secure_session()
     session_set_cookie_params([
         'lifetime' => 0,                       // until the browser is closed
         'path'     => '/',
-        'secure'   => request_is_https(),      // Secure cookie when HTTPS is available
+        'secure'   => env_value('APP_ENV') === 'production' || request_is_https(),      // Secure cookie when HTTPS is available
         'httponly' => true,                    // JavaScript cannot read the cookie
         'samesite' => 'Lax',
     ]);
-    session_start();
+    session_set_save_handler(new PgSessionHandler(new_session_connection()), true);
+    if (!session_start()) {
+        throw new RuntimeException('Could not establish a persistent session');
+    }
 }
 
 if (session_status() === PHP_SESSION_NONE) {
@@ -74,7 +78,7 @@ function login_user($account)
     $_SESSION['role']     = $account['role'];
 }
 
-/** Completely end the current session (data, cookie and server-side file). */
+/** Completely end the current session (data, cookie and server-side PostgreSQL row). */
 function destroy_session()
 {
     $_SESSION = [];
@@ -102,7 +106,12 @@ function start_fresh_session()
 function redirect_if_logged_in()
 {
     if (!empty($_SESSION['user_id'])) {
-        redirect('dashboard.php');
+        if (get_session_account() !== null) {
+            redirect('dashboard.php');
+        }
+        // A disabled/deleted account must not bounce between login and dashboard.
+        destroy_session();
+        start_fresh_session();
     }
 }
 

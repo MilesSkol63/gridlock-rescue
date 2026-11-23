@@ -6,9 +6,9 @@
  *   change_password: needs the current password
  *   reset_progress : players only (administrators have no progress)
  */
-require_once 'includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
-/** @var mysqli $conn */
+/** @var PDO $conn */
 
 $account  = require_login();
 $is_admin = ($account['role'] === 'admin');
@@ -43,9 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['username'] = $username;                 // keep the navbar consistent
                 set_flash('success', 'Your profile was updated.');
                 redirect('profile.php');
-            } catch (mysqli_sql_exception $ex) {
-                error_log('Gridlock Rescue: profile update failed: ' . $ex->getMessage());
-                $profile_errors['form'] = ($ex->getCode() === 1062)
+            } catch (PDOException $ex) {
+                error_log('Gridlock Rescue: profile update failed: ' . ('SQLSTATE ' . $ex->getCode()));
+                $profile_errors['form'] = is_unique_violation($ex)
                     ? 'That username or email is already registered.'
                     : 'Your profile could not be updated. Please try again.';
             }
@@ -108,7 +108,7 @@ $active_page = 'profile';
     <link href="assets/css/style.css" rel="stylesheet">
 </head>
 <body>
-    <?php include 'includes/navbar.php'; ?>
+    <?php include __DIR__ . '/../includes/navbar.php'; ?>
 
     <main class="container page-main" id="page-content">
         <?php show_flash(); ?>
@@ -211,7 +211,7 @@ $active_page = 'profile';
 <?php endif; ?>
     </main>
 
-    <?php include 'includes/confirm_modal.php'; ?>
+    <?php include __DIR__ . '/../includes/confirm_modal.php'; ?>
 
     <footer class="site-footer">Gridlock Rescue - Endterm Project</footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

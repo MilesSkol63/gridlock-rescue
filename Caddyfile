@@ -1,0 +1,20 @@
+:{$PORT:80} {
+    root * /app/public
+    encode zstd gzip
+
+    # Refuse attempts to reach private components or their historical paths.
+    @private path /includes/* /database/* /tools/* /tests/* /docs/* /config/* /.git* /.env* /composer.* /setup_admin.php
+    respond @private 404
+
+    # This app uses real PHP filenames, NOT a front-controller router.
+    # Disable php_server's default fallback to /index.php for unknown paths.
+    php_server {
+        try_files {path} {path}/index.php
+    }
+
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}

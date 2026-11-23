@@ -4,7 +4,7 @@
  * POST-only logout. Checks the CSRF token, destroys the session and returns to login.
  * No HTML is rendered here, so there is no document structure to maintain.
  */
-require_once 'includes/auth.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 // Opening logout.php by typing the URL (GET) does nothing harmful.
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

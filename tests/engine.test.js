@@ -1,5 +1,5 @@
 /** tests/engine.test.js - automated rule tests for assets/js/sliding-engine.js and the six bundled levels.   node tests/engine.test.js */
-const E = require("../assets/js/sliding-engine.js");
+const E = require("../public/assets/js/sliding-engine.js");
 const LEVELS = require("./fixtures/sliding_levels.json"); // same six levels that database/*.sql inserts (checked by sql_seed.test.js)
 
 let passed = 0,
